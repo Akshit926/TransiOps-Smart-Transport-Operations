@@ -675,5 +675,26 @@ module.exports = {
       writeJSON('documents', docs);
       return newDoc;
     }
+  },
+
+  getDocumentById: async (id) => {
+    if (isSQLite) {
+      return dbGet("SELECT * FROM documents WHERE id = ?", [id]);
+    } else {
+      const docs = readJSON('documents');
+      return docs.find(d => d.id === parseInt(id)) || null;
+    }
+  },
+
+  deleteDocument: async (id) => {
+    if (isSQLite) {
+      await dbRun("DELETE FROM documents WHERE id = ?", [id]);
+      return { id };
+    } else {
+      let docs = readJSON('documents');
+      docs = docs.filter(d => d.id !== parseInt(id));
+      writeJSON('documents', docs);
+      return { id };
+    }
   }
 };

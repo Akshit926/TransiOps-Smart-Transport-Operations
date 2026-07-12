@@ -214,6 +214,26 @@ app.get('/api/vehicles/:regNumber/documents', async (req, res) => {
   }
 });
 
+app.delete('/api/vehicles/:regNumber/documents/:docId', authorize(['fleet_manager']), async (req, res) => {
+  const { regNumber, docId } = req.params;
+  try {
+    const doc = await db.getDocumentById(docId);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    const absolutePath = path.join(__dirname, '..', doc.file_path);
+    fs.unlink(absolutePath, (err) => {
+      if (err) console.error('Failed to delete file from disk:', err.message);
+    });
+
+    await db.deleteDocument(docId);
+    res.json({ message: 'Document successfully deleted.', id: docId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 4. Drivers CRUD
 app.get('/api/drivers', async (req, res) => {
   try {
@@ -261,6 +281,47 @@ app.delete('/api/drivers/:id', authorize(['fleet_manager', 'safety_officer']), a
     const id = req.params.id;
     await db.deleteDriver(id);
     res.json({ message: `Driver deleted successfully.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/drivers/:id/remind', authorize(['fleet_manager', 'safety_officer']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const driver = await db.getDriverById(id);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found.' });
+    }
+
+    const emailRecord = {
+      id: Date.now(),
+      driver_id: driver.id,
+      driver_name: driver.name,
+      recipient: `${driver.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}@transitops.com`,
+      subject: 'URGENT: Commercial Driver License Expiry Notification',
+      body: `Hello ${driver.name},\n\nThis is an automated compliance reminder from TransitOps. Our records show that your driver license (${driver.license_number}) class ${driver.license_category} is expired or expiring soon (expiration date: ${driver.license_expiry_date}).\n\nPlease submit your renewed document to the Safety Officer immediately to ensure you remain active on our dispatch roster.\n\nBest regards,\nTransitOps Operations Team`,
+      sent_at: new Date().toISOString()
+    };
+
+    const DATA_DIR = path.join(__dirname, '..', 'data');
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    const sentEmailsFile = path.join(DATA_DIR, 'sent_emails.json');
+    let emailsList = [];
+    if (fs.existsSync(sentEmailsFile)) {
+      try {
+        emailsList = JSON.parse(fs.readFileSync(sentEmailsFile, 'utf8'));
+      } catch (e) {
+        emailsList = [];
+      }
+    }
+    emailsList.push(emailRecord);
+    fs.writeFileSync(sentEmailsFile, JSON.stringify(emailsList, null, 2), 'utf8');
+
+    res.json({ message: `Compliance reminder email sent successfully to ${emailRecord.recipient}.`, email: emailRecord });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

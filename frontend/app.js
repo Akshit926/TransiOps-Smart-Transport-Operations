@@ -15,6 +15,13 @@ const state = {
   fuelLogs: [],
   expenses: [],
   reports: [],
+  // Sorting Configuration
+  sort: {
+    vehicles: { column: null, direction: 'asc' },
+    drivers: { column: null, direction: 'asc' },
+    trips: { column: null, direction: 'asc' },
+    reports: { column: null, direction: 'asc' }
+  },
   // Chart instances
   charts: {
     fleetStatus: null,
@@ -119,6 +126,36 @@ function applyRolePermissions() {
 }
 
 // ----------------------------------------------------
+// TOAST NOTIFICATIONS SYSTEM
+// ----------------------------------------------------
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+
+  let iconName = 'check-circle';
+  if (type === 'error') iconName = 'alert-octagon';
+  else if (type === 'warning') iconName = 'alert-triangle';
+
+  toast.innerHTML = `
+    <i data-lucide="${iconName}"></i>
+    <div style="flex-grow: 1;">${message}</div>
+  `;
+  container.appendChild(toast);
+  lucide.createIcons();
+
+  // Remove toast from DOM after animation completes
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.3s ease forwards';
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+  }, 4500);
+}
+
+// ----------------------------------------------------
 // EVENT LISTENERS SETUP
 // ----------------------------------------------------
 function setupEventListeners() {
@@ -142,8 +179,9 @@ function setupEventListeners() {
       localStorage.setItem('transitops_user', JSON.stringify(data));
       showAppLayout();
       navigateTo('dashboard');
+      showToast(`Welcome back, ${data.name}!`, 'success');
     } catch (err) {
-      alert(`Login Error: ${err.message}`);
+      showToast(`Login Error: ${err.message}`, 'error');
     }
   });
   
@@ -160,6 +198,7 @@ function setupEventListeners() {
   
   // Logout Button
   document.getElementById('logout-btn').addEventListener('click', () => {
+    showToast('Signed out successfully.', 'info');
     localStorage.removeItem('transitops_user');
     state.currentUser = null;
     showLoginLayout();
@@ -171,6 +210,11 @@ function setupEventListeners() {
     const newTheme = (currentTheme === 'dark') ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('transitops_theme', newTheme);
+    
+    // Redraw charts if we are on dashboard to update colors
+    if (state.activeView === 'dashboard') {
+      renderDashboardCharts(state.vehicles);
+    }
   });
   
   // Sidebar Navigation Links
@@ -190,7 +234,7 @@ function setupEventListeners() {
     document.getElementById('notification-bar').style.display = 'none';
   });
 
-  // --- FILTERS & INTERACTIVITY ---
+  // --- FILTERS & SEARCH EVENT LISTENERS ---
   // Dashboard Filters
   document.getElementById('db-filter-type').addEventListener('change', () => loadDashboardData());
   document.getElementById('db-filter-region').addEventListener('change', () => loadDashboardData());
@@ -199,6 +243,18 @@ function setupEventListeners() {
     document.getElementById('db-filter-region').value = '';
     loadDashboardData();
   });
+
+  // Vehicles Search & Filter
+  document.getElementById('veh-search').addEventListener('input', () => renderVehiclesTable());
+  document.getElementById('veh-filter-status').addEventListener('change', () => renderVehiclesTable());
+
+  // Drivers Search & Filter
+  document.getElementById('drv-search').addEventListener('input', () => renderDriversTable());
+  document.getElementById('drv-filter-status').addEventListener('change', () => renderDriversTable());
+
+  // Trips Search & Filter
+  document.getElementById('trip-search').addEventListener('input', () => renderTripsTable());
+  document.getElementById('trip-filter-status').addEventListener('change', () => renderTripsTable());
 
   // --- MODAL TRIGGERS ---
   // Modal close buttons (cancel / x)
@@ -212,6 +268,12 @@ function setupEventListeners() {
 
   // Add Vehicle modal trigger
   document.getElementById('btn-add-vehicle').addEventListener('click', () => {
+    document.getElementById('vehicle-edit-id').value = '';
+    document.getElementById('form-vehicle').reset();
+    document.getElementById('vehicle-reg').readOnly = false;
+    document.getElementById('vehicle-reg').classList.remove('input-readonly');
+    document.getElementById('vehicle-status-group').style.display = 'none';
+    document.querySelector('#modal-vehicle h2').textContent = 'Register New Vehicle';
     openModal('modal-vehicle');
   });
 
@@ -265,6 +327,9 @@ function setupEventListeners() {
     openModal('modal-expense');
   });
 
+  // --- SORTABLE HEADERS TRIGGERS ---
+  setupTableSorting();
+
   // --- SUBMISSIONS ---
   document.getElementById('form-vehicle').addEventListener('submit', handleAddVehicle);
   document.getElementById('form-driver').addEventListener('submit', handleAddDriver);
@@ -279,6 +344,97 @@ function setupEventListeners() {
   // --- EXPORTS ---
   document.getElementById('btn-export-csv').addEventListener('click', exportReportsCSV);
   document.getElementById('btn-export-pdf').addEventListener('click', exportReportsPDF);
+}
+
+// ----------------------------------------------------
+// TABLE SORTING CONFIGURATION
+// ----------------------------------------------------
+function setupTableSorting() {
+  // Setup vehicles table headers
+  const vehHeaders = document.querySelectorAll('#vehicles-table th[data-col]');
+  vehHeaders.forEach(th => {
+    th.classList.add('sortable');
+    th.addEventListener('click', () => {
+      toggleSort('vehicles', th.getAttribute('data-col'), th);
+      renderVehiclesTable();
+    });
+  });
+
+  // Setup drivers table headers
+  const drvHeaders = document.querySelectorAll('#drivers-table th[data-col]');
+  drvHeaders.forEach(th => {
+    th.classList.add('sortable');
+    th.addEventListener('click', () => {
+      toggleSort('drivers', th.getAttribute('data-col'), th);
+      renderDriversTable();
+    });
+  });
+
+  // Setup trips table headers
+  const tripHeaders = document.querySelectorAll('#trips-table th[data-col]');
+  tripHeaders.forEach(th => {
+    th.classList.add('sortable');
+    th.addEventListener('click', () => {
+      toggleSort('trips', th.getAttribute('data-col'), th);
+      renderTripsTable();
+    });
+  });
+
+  // Setup reports table headers
+  const repHeaders = document.querySelectorAll('#reports-table th[data-col]');
+  repHeaders.forEach(th => {
+    th.classList.add('sortable');
+    th.addEventListener('click', () => {
+      toggleSort('reports', th.getAttribute('data-col'), th);
+      renderReportsData();
+    });
+  });
+}
+
+function toggleSort(tableKey, columnName, element) {
+  const current = state.sort[tableKey];
+  
+  // Clear other active sort UI sibling headers
+  const tableEl = element.closest('table');
+  tableEl.querySelectorAll('th').forEach(th => {
+    if (th !== element) th.className = 'sortable';
+  });
+
+  if (current.column === columnName) {
+    current.direction = current.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    current.column = columnName;
+    current.direction = 'asc';
+  }
+
+  element.className = `sortable ${current.direction}`;
+}
+
+// Universal sorting helper function
+function sortArray(array, column, direction) {
+  if (!column) return array;
+  
+  return array.sort((a, b) => {
+    let valA = a[column];
+    let valB = b[column];
+
+    // Handle number conversions
+    if (typeof valA === 'string' && !isNaN(valA) && valA.trim() !== '') valA = parseFloat(valA);
+    if (typeof valB === 'string' && !isNaN(valB) && valB.trim() !== '') valB = parseFloat(valB);
+
+    if (valA === null || valA === undefined) return 1;
+    if (valB === null || valB === undefined) return -1;
+
+    if (typeof valA === 'string') {
+      return direction === 'asc' 
+        ? valA.localeCompare(valB) 
+        : valB.localeCompare(valA);
+    } else {
+      return direction === 'asc' 
+        ? valA - valB 
+        : valB - valA;
+    }
+  });
 }
 
 // ----------------------------------------------------
@@ -373,7 +529,7 @@ function closeAllModals() {
 }
 
 // ----------------------------------------------------
-// DATA LOADER & RENDERERS
+// DATA LOADERS & TABLE RENDERERS
 // ----------------------------------------------------
 
 // 1. Dashboard View
@@ -382,9 +538,6 @@ async function loadDashboardData() {
   const region = document.getElementById('db-filter-region').value;
   
   let endpoint = '/dashboard/kpis';
-  // If filter criteria set, let's fetch matching lists manually to compute filtered KPIs
-  // since server dashboard API handles overall fleet. For dashboard filtering,
-  // we filter local records to show matching numbers in real-time.
   
   try {
     const kpis = await apiJSONCall(endpoint);
@@ -452,7 +605,7 @@ function scanComplianceAlerts() {
   
   const today = new Date().toISOString().split('T')[0];
   const warningThreshold = new Date();
-  warningThreshold.setDate(warningThreshold.getDate() + 30); // 30 days expiry alert
+  warningThreshold.setDate(warningThreshold.getDate() + 30);
   const thresholdStr = warningThreshold.toISOString().split('T')[0];
 
   let expiredCount = 0;
@@ -474,9 +627,9 @@ function scanComplianceAlerts() {
   if (expiredCount > 0 || expiringSoonCount > 0 || lowSafetyCount > 0) {
     let message = '<strong>Alert System Notices:</strong> ';
     const parts = [];
-    if (expiredCount > 0) parts.push(`<span class="badge badge-sm suspended">${expiredCount} Driver license(s) expired!</span>`);
-    if (expiringSoonCount > 0) parts.push(`<span class="badge badge-sm draft">${expiringSoonCount} License(s) expiring within 30 days.</span>`);
-    if (lowSafetyCount > 0) parts.push(`<span class="badge badge-sm cancelled">${lowSafetyCount} Driver(s) with low safety score (<60).</span>`);
+    if (expiredCount > 0) parts.push(`<span class="badge badge-sm suspended">${expiredCount} License(s) expired!</span>`);
+    if (expiringSoonCount > 0) parts.push(`<span class="badge badge-sm draft">${expiringSoonCount} Expiring within 30 days.</span>`);
+    if (lowSafetyCount > 0) parts.push(`<span class="badge badge-sm cancelled">${lowSafetyCount} Low safety score (<60).</span>`);
     
     alertMsg.innerHTML = message + parts.join(' | ');
     alertBar.style.display = 'flex';
@@ -488,10 +641,42 @@ function scanComplianceAlerts() {
 // 2. Vehicles View
 async function loadVehiclesData() {
   state.vehicles = await apiJSONCall('/vehicles');
+  renderVehiclesTable();
+}
+
+function renderVehiclesTable() {
+  const query = document.getElementById('veh-search').value.toLowerCase().trim();
+  const statusFilter = document.getElementById('veh-filter-status').value;
+
+  let displayList = [...state.vehicles];
+
+  // Filtering
+  if (query) {
+    displayList = displayList.filter(v => 
+      v.registration_number.toLowerCase().includes(query) || 
+      v.name.toLowerCase().includes(query)
+    );
+  }
+  if (statusFilter) {
+    displayList = displayList.filter(v => v.status === statusFilter);
+  }
+
+  // Sorting
+  const sortCol = state.sort.vehicles.column;
+  const sortDir = state.sort.vehicles.direction;
+  if (sortCol) {
+    displayList = sortArray(displayList, sortCol, sortDir);
+  }
+
   const tbody = document.querySelector('#vehicles-table tbody');
   tbody.innerHTML = '';
 
-  state.vehicles.forEach(v => {
+  if (displayList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--text-muted);">No matching vehicles found.</td></tr>`;
+    return;
+  }
+
+  displayList.forEach(v => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${v.registration_number}</strong></td>
@@ -506,6 +691,9 @@ async function loadVehiclesData() {
         <div class="btn-group">
           <button class="btn btn-outline btn-sm" onclick="openDocumentModal('${v.registration_number}')">
             <i data-lucide="file-text" style="width:14px;height:14px;"></i> Docs
+          </button>
+          <button class="btn btn-outline btn-sm action-restricted-manager" onclick="editVehicle('${v.registration_number}')" style="${state.currentUser.role === 'fleet_manager' ? '' : 'display:none;'}">
+            <i data-lucide="edit" style="width:14px;height:14px;"></i> Edit
           </button>
           <button class="btn btn-outline btn-sm action-restricted-manager" onclick="deleteVehicle('${v.registration_number}')" style="${state.currentUser.role === 'fleet_manager' ? '' : 'display:none;'}">
             <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete
@@ -522,12 +710,45 @@ async function loadVehiclesData() {
 // 3. Drivers View
 async function loadDriversData() {
   state.drivers = await apiJSONCall('/drivers');
+  renderDriversTable();
+}
+
+function renderDriversTable() {
+  const query = document.getElementById('drv-search').value.toLowerCase().trim();
+  const statusFilter = document.getElementById('drv-filter-status').value;
+
+  let displayList = [...state.drivers];
+
+  // Filtering
+  if (query) {
+    displayList = displayList.filter(d => 
+      d.name.toLowerCase().includes(query) || 
+      d.license_number.toLowerCase().includes(query) ||
+      d.license_category.toLowerCase().includes(query)
+    );
+  }
+  if (statusFilter) {
+    displayList = displayList.filter(d => d.status === statusFilter);
+  }
+
+  // Sorting
+  const sortCol = state.sort.drivers.column;
+  const sortDir = state.sort.drivers.direction;
+  if (sortCol) {
+    displayList = sortArray(displayList, sortCol, sortDir);
+  }
+
   const tbody = document.querySelector('#drivers-table tbody');
   tbody.innerHTML = '';
 
+  if (displayList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">No matching drivers found.</td></tr>`;
+    return;
+  }
+
   const today = new Date().toISOString().split('T')[0];
 
-  state.drivers.forEach(d => {
+  displayList.forEach(d => {
     const isExpired = d.license_expiry_date < today;
     const licenseClass = isExpired ? 'style="color: #f87171; font-weight: 600;"' : '';
     const safetyBadge = d.safety_score < 60 ? 'color: #f87171; font-weight: 600;' : (d.safety_score >= 90 ? 'color: #34d399;' : '');
@@ -546,6 +767,11 @@ async function loadDriversData() {
       <td><span class="badge ${d.status.toLowerCase().replace(' ', '')}">${d.status}</span></td>
       <td>
         <div class="btn-group">
+          ${isExpired || d.status === 'Suspended' ? `
+            <button class="btn btn-outline btn-sm action-restricted-manager-safety" onclick="sendEmailReminder('${d.id}')" title="Send Email Reminder" style="border-color: var(--color-inshop); color: var(--color-inshop); ${(state.currentUser.role === 'fleet_manager' || state.currentUser.role === 'safety_officer') ? '' : 'display:none;'}">
+              <i data-lucide="mail" style="width:14px;height:14px;"></i> Remind
+            </button>
+          ` : ''}
           <button class="btn btn-outline btn-sm action-restricted-manager-safety" onclick="editDriver('${d.id}')" style="${(state.currentUser.role === 'fleet_manager' || state.currentUser.role === 'safety_officer') ? '' : 'display:none;'}">
             <i data-lucide="edit" style="width:14px;height:14px;"></i> Edit
           </button>
@@ -564,11 +790,46 @@ async function loadDriversData() {
 // 4. Trips View
 async function loadTripsData() {
   state.trips = await apiJSONCall('/trips');
-  state.vehicles = await apiJSONCall('/vehicles'); // refresh vehicles
+  state.vehicles = await apiJSONCall('/vehicles'); // refresh vehicles cache
+  renderTripsTable();
+}
+
+function renderTripsTable() {
+  const query = document.getElementById('trip-search').value.toLowerCase().trim();
+  const statusFilter = document.getElementById('trip-filter-status').value;
+
+  let displayList = [...state.trips];
+
+  // Filtering
+  if (query) {
+    displayList = displayList.filter(t => 
+      t.id.toString().includes(query) ||
+      t.source.toLowerCase().includes(query) || 
+      t.destination.toLowerCase().includes(query) ||
+      t.vehicle_id.toLowerCase().includes(query) ||
+      (t.driver_name && t.driver_name.toLowerCase().includes(query))
+    );
+  }
+  if (statusFilter) {
+    displayList = displayList.filter(t => t.status === statusFilter);
+  }
+
+  // Sorting
+  const sortCol = state.sort.trips.column;
+  const sortDir = state.sort.trips.direction;
+  if (sortCol) {
+    displayList = sortArray(displayList, sortCol, sortDir);
+  }
+
   const tbody = document.querySelector('#trips-table tbody');
   tbody.innerHTML = '';
 
-  state.trips.forEach(t => {
+  if (displayList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color: var(--text-muted);">No matching trips found.</td></tr>`;
+    return;
+  }
+
+  displayList.forEach(t => {
     let actionButtons = '';
     const canManageTrips = state.currentUser.role === 'fleet_manager' || state.currentUser.role === 'driver';
 
@@ -695,6 +956,14 @@ async function loadExpensesData() {
 // 7. Reports & ROI View
 async function loadReportsData() {
   state.reports = await apiJSONCall('/reports/analytics');
+  
+  // Sort reports if set
+  const sortCol = state.sort.reports.column;
+  const sortDir = state.sort.reports.direction;
+  if (sortCol) {
+    state.reports = sortArray(state.reports, sortCol, sortDir);
+  }
+
   const tbody = document.querySelector('#reports-table tbody');
   tbody.innerHTML = '';
 
@@ -908,27 +1177,64 @@ function setupExpenseFormDropdowns(elementId) {
 // FORM SUBMISSIONS LOGIC (API CALLS)
 // ----------------------------------------------------
 
-// 1. Add Vehicle
+// 1. Add / Edit Vehicle
 async function handleAddVehicle(e) {
   e.preventDefault();
+  const id = document.getElementById('vehicle-edit-id').value;
+  
   const payload = {
     registration_number: document.getElementById('vehicle-reg').value.toUpperCase().trim(),
     name: document.getElementById('vehicle-name').value.trim(),
     type: document.getElementById('vehicle-type').value,
-    max_load_capacity: document.getElementById('vehicle-capacity').value,
-    odometer: document.getElementById('vehicle-odometer').value,
-    acquisition_cost: document.getElementById('vehicle-cost').value,
+    max_load_capacity: parseFloat(document.getElementById('vehicle-capacity').value),
+    odometer: parseFloat(document.getElementById('vehicle-odometer').value),
+    acquisition_cost: parseFloat(document.getElementById('vehicle-cost').value),
     region: document.getElementById('vehicle-region').value
   };
 
+  if (id) {
+    payload.status = document.getElementById('vehicle-status').value;
+  }
+
   try {
-    await apiJSONCall('/vehicles', 'POST', payload);
+    if (id) {
+      await apiJSONCall(`/vehicles/${id}`, 'PUT', payload);
+      showToast(`Vehicle ${payload.registration_number} updated successfully!`, 'success');
+    } else {
+      await apiJSONCall('/vehicles', 'POST', payload);
+      showToast(`Vehicle ${payload.registration_number} registered successfully!`, 'success');
+    }
     closeAllModals();
     document.getElementById('form-vehicle').reset();
+    document.getElementById('vehicle-status-group').style.display = 'none';
     await navigateTo('vehicles');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
+}
+
+async function editVehicle(regNumber) {
+  const vehicle = state.vehicles.find(v => v.registration_number === regNumber);
+  if (!vehicle) return;
+
+  document.getElementById('vehicle-edit-id').value = vehicle.registration_number;
+  document.getElementById('vehicle-reg').value = vehicle.registration_number;
+  document.getElementById('vehicle-reg').readOnly = true;
+  document.getElementById('vehicle-reg').classList.add('input-readonly');
+  
+  document.getElementById('vehicle-name').value = vehicle.name;
+  document.getElementById('vehicle-type').value = vehicle.type;
+  document.getElementById('vehicle-capacity').value = vehicle.max_load_capacity;
+  document.getElementById('vehicle-odometer').value = vehicle.odometer;
+  document.getElementById('vehicle-cost').value = vehicle.acquisition_cost;
+  document.getElementById('vehicle-region').value = vehicle.region;
+
+  // Show status group in edit mode
+  document.getElementById('vehicle-status-group').style.display = 'block';
+  document.getElementById('vehicle-status').value = vehicle.status;
+  document.querySelector('#modal-vehicle h2').textContent = 'Modify Vehicle Details';
+
+  openModal('modal-vehicle');
 }
 
 // 2. Add/Edit Driver
@@ -941,7 +1247,7 @@ async function handleAddDriver(e) {
     license_category: document.getElementById('driver-license-cat').value,
     license_expiry_date: document.getElementById('driver-license-expiry').value,
     contact_number: document.getElementById('driver-contact').value.trim(),
-    safety_score: document.getElementById('driver-safety').value || 100
+    safety_score: parseFloat(document.getElementById('driver-safety').value || 100)
   };
 
   if (id) {
@@ -951,14 +1257,16 @@ async function handleAddDriver(e) {
   try {
     if (id) {
       await apiJSONCall(`/drivers/${id}`, 'PUT', payload);
+      showToast(`Driver ${payload.name} details updated.`, 'success');
     } else {
       await apiJSONCall('/drivers', 'POST', payload);
+      showToast(`Driver ${payload.name} registered.`, 'success');
     }
     closeAllModals();
     document.getElementById('form-driver').reset();
     await navigateTo('drivers');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -982,6 +1290,16 @@ async function editDriver(id) {
   openModal('modal-driver');
 }
 
+// Send Compliance Reminder Email
+async function sendEmailReminder(id) {
+  try {
+    const res = await apiJSONCall(`/drivers/${id}/remind`, 'POST');
+    showToast(res.message, 'success');
+  } catch (err) {
+    showToast(`Error sending email: ${err.message}`, 'error');
+  }
+}
+
 // 3. Create Trip
 async function handleCreateTrip(e) {
   e.preventDefault();
@@ -994,7 +1312,7 @@ async function handleCreateTrip(e) {
   const maxCap = parseFloat(capacityHintEl.getAttribute('data-max') || 0);
   
   if (cargoWeight > maxCap) {
-    alert(`Error: Cargo weight (${cargoWeight} kg) exceeds vehicle's maximum load capacity (${maxCap} kg).`);
+    showToast(`Error: Cargo weight (${cargoWeight} kg) exceeds vehicle capacity (${maxCap} kg).`, 'error');
     return;
   }
 
@@ -1002,20 +1320,21 @@ async function handleCreateTrip(e) {
     source: document.getElementById('trip-source').value.trim(),
     destination: document.getElementById('trip-destination').value.trim(),
     vehicle_id: vReg,
-    driver_id: document.getElementById('trip-driver').value,
+    driver_id: parseInt(document.getElementById('trip-driver').value),
     cargo_weight: cargoWeight,
-    planned_distance: document.getElementById('trip-distance').value,
-    revenue: document.getElementById('trip-revenue').value || 0
+    planned_distance: parseFloat(document.getElementById('trip-distance').value),
+    revenue: parseFloat(document.getElementById('trip-revenue').value || 0)
   };
 
   try {
     await apiJSONCall('/trips', 'POST', payload);
+    showToast('Draft trip successfully generated!', 'success');
     closeAllModals();
     document.getElementById('form-trip').reset();
     document.getElementById('trip-vehicle-cap-hint').textContent = '';
     await navigateTo('trips');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1024,9 +1343,10 @@ async function dispatchTrip(id) {
   if (!confirm('Are you sure you want to dispatch this trip? Both driver and vehicle statuses will change to On Trip.')) return;
   try {
     await apiJSONCall(`/trips/${id}/dispatch`, 'PUT');
+    showToast('Trip successfully dispatched! Vehicles and drivers are now en route.', 'success');
     await navigateTo('trips');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1034,9 +1354,10 @@ async function cancelTrip(id) {
   if (!confirm('Are you sure you want to cancel this trip? Any active driver/vehicle assignments will be restored to Available.')) return;
   try {
     await apiJSONCall(`/trips/${id}/cancel`, 'PUT');
+    showToast('Trip cancelled. Assets restored to Available.', 'warning');
     await navigateTo('trips');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1054,16 +1375,17 @@ async function handleCompleteTrip(e) {
   e.preventDefault();
   const id = document.getElementById('complete-trip-id').value;
   const payload = {
-    odometer_end: document.getElementById('complete-odo-end').value,
-    fuel_consumed: document.getElementById('complete-fuel').value
+    odometer_end: parseFloat(document.getElementById('complete-odo-end').value),
+    fuel_consumed: parseFloat(document.getElementById('complete-fuel').value)
   };
 
   try {
     await apiJSONCall(`/trips/${id}/complete`, 'PUT', payload);
+    showToast('Trip completed. Vehicle and driver statuses restored. Fuel consumption receipt auto-logged.', 'success');
     closeAllModals();
     await navigateTo('trips');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1077,11 +1399,12 @@ async function handleLogMaintenance(e) {
 
   try {
     await apiJSONCall('/maintenance', 'POST', payload);
+    showToast(`Vehicle ${payload.vehicle_id} put into shop for maintenance.`, 'warning');
     closeAllModals();
     document.getElementById('form-maintenance').reset();
     await navigateTo('maintenance');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1096,16 +1419,17 @@ async function handleCloseMaintenance(e) {
   e.preventDefault();
   const id = document.getElementById('close-maint-id').value;
   const payload = {
-    cost: document.getElementById('close-maint-cost').value,
+    cost: parseFloat(document.getElementById('close-maint-cost').value),
     end_date: document.getElementById('close-maint-date').value
   };
 
   try {
     await apiJSONCall(`/maintenance/${id}/close`, 'PUT', payload);
+    showToast('Maintenance solved. Vehicle returned to Available. Maintenance costs auto-logged to operational expenses.', 'success');
     closeAllModals();
     await navigateTo('maintenance');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1114,18 +1438,19 @@ async function handleLogFuel(e) {
   e.preventDefault();
   const payload = {
     vehicle_id: document.getElementById('fuel-vehicle').value,
-    liters: document.getElementById('fuel-liters').value,
-    cost: document.getElementById('fuel-cost').value,
+    liters: parseFloat(document.getElementById('fuel-liters').value),
+    cost: parseFloat(document.getElementById('fuel-cost').value),
     date: document.getElementById('fuel-date').value
   };
 
   try {
     await apiJSONCall('/fuel', 'POST', payload);
+    showToast(`Fuel receipt logged successfully for vehicle ${payload.vehicle_id}.`, 'success');
     closeAllModals();
     document.getElementById('form-fuel').reset();
     await navigateTo('expenses');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1134,18 +1459,19 @@ async function handleLogExpense(e) {
   const payload = {
     vehicle_id: document.getElementById('expense-vehicle').value,
     type: document.getElementById('expense-type').value,
-    cost: document.getElementById('expense-cost').value,
+    cost: parseFloat(document.getElementById('expense-cost').value),
     date: document.getElementById('expense-date').value,
     description: document.getElementById('expense-desc').value.trim()
   };
 
   try {
     await apiJSONCall('/expenses', 'POST', payload);
+    showToast(`Expense logged successfully for vehicle ${payload.vehicle_id}.`, 'success');
     closeAllModals();
     document.getElementById('form-expense').reset();
     await navigateTo('expenses');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1179,11 +1505,16 @@ async function refreshDocumentList(regNumber) {
       li.innerHTML = `
         <div>
           <strong>${doc.document_type}</strong>
-          <div style="font-size:11px; color:var(--text-muted);">Uploaded: ${doc.upload_date}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${doc.file_name} (Uploaded: ${doc.upload_date})</div>
         </div>
-        <a href="http://localhost:5000${doc.file_path}" target="_blank">
-          <i data-lucide="external-link"></i> View File
-        </a>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <a href="http://localhost:5000${doc.file_path}" target="_blank" style="font-size:12px;">
+            <i data-lucide="external-link" style="width:12px;height:12px;vertical-align:middle;"></i> View
+          </a>
+          <button type="button" class="btn btn-outline btn-sm action-restricted-manager" onclick="deleteDocument('${regNumber}', '${doc.id}')" style="padding: 2px 6px; border-color: rgba(239, 68, 68, 0.3); color: #ef4444; ${state.currentUser.role === 'fleet_manager' ? '' : 'display:none;'}">
+            <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
+          </button>
+        </div>
       `;
       docListUl.appendChild(li);
     });
@@ -1201,7 +1532,7 @@ async function handleDocumentUpload(e) {
   const fileInput = document.getElementById('doc-file');
   
   if (fileInput.files.length === 0) {
-    alert('Please select a file.');
+    showToast('Please select a document file to upload.', 'warning');
     return;
   }
   
@@ -1210,16 +1541,27 @@ async function handleDocumentUpload(e) {
   formData.append('document_type', docType);
 
   try {
-    // Note: FormData requires omitting 'Content-Type' header so fetch sets boundaries
     await apiCall(`/vehicles/${regNumber}/documents`, {
       method: 'POST',
       body: formData
     });
     
+    showToast('Document uploaded successfully.', 'success');
     fileInput.value = '';
     await refreshDocumentList(regNumber);
   } catch (err) {
-    alert(`Upload failed: ${err.message}`);
+    showToast(`Upload failed: ${err.message}`, 'error');
+  }
+}
+
+async function deleteDocument(regNumber, docId) {
+  if (!confirm('Are you sure you want to delete this document from the server?')) return;
+  try {
+    await apiJSONCall(`/vehicles/${regNumber}/documents/${docId}`, 'DELETE');
+    showToast('Document deleted.', 'warning');
+    await refreshDocumentList(regNumber);
+  } catch (err) {
+    showToast(`Delete failed: ${err.message}`, 'error');
   }
 }
 
@@ -1227,7 +1569,7 @@ async function handleDocumentUpload(e) {
 // REPORTS EXPORT OPERATIONS
 // ----------------------------------------------------
 function exportReportsCSV() {
-  if (!state.reports.length) return alert('No reports analytics data to export.');
+  if (!state.reports.length) return showToast('No reports analytics data to export.', 'warning');
 
   const headers = [
     'Vehicle Reg',
@@ -1274,12 +1616,12 @@ function exportReportsCSV() {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  showToast('Reports CSV exported successfully.', 'success');
 }
 
 function exportReportsPDF() {
-  if (!state.reports.length) return alert('No reports analytics data to export.');
+  if (!state.reports.length) return showToast('No reports analytics data to export.', 'warning');
   
-  // Create print window content
   const printWindow = window.open('', '_blank');
   
   let tableRowsHtml = '';
@@ -1349,6 +1691,7 @@ function exportReportsPDF() {
     </html>
   `);
   printWindow.document.close();
+  showToast('Reports print configuration opened.', 'success');
 }
 
 // ----------------------------------------------------
@@ -1358,9 +1701,10 @@ async function deleteVehicle(regNumber) {
   if (!confirm(`Are you sure you want to delete vehicle ${regNumber}?`)) return;
   try {
     await apiJSONCall(`/vehicles/${regNumber}`, 'DELETE');
+    showToast(`Vehicle ${regNumber} deleted successfully.`, 'warning');
     await navigateTo('vehicles');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }
 
@@ -1368,8 +1712,9 @@ async function deleteDriver(id) {
   if (!confirm('Are you sure you want to delete this driver?')) return;
   try {
     await apiJSONCall(`/drivers/${id}`, 'DELETE');
+    showToast('Driver profile removed.', 'warning');
     await navigateTo('drivers');
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(`Error: ${err.message}`, 'error');
   }
 }

@@ -239,6 +239,23 @@
           </button>
         </div>
 
+        <div class="filter-bar card" style="margin-bottom: 20px; padding: 16px;">
+          <div class="filter-group" style="flex-grow: 3;">
+            <label for="veh-search">Search Vehicles</label>
+            <input type="text" id="veh-search" placeholder="Search by registration number or name/model...">
+          </div>
+          <div class="filter-group">
+            <label for="veh-filter-status">Status</label>
+            <select id="veh-filter-status">
+              <option value="">All Statuses</option>
+              <option value="Available">Available</option>
+              <option value="On Trip">On Trip</option>
+              <option value="In Shop">In Shop</option>
+              <option value="Retired">Retired</option>
+            </select>
+          </div>
+        </div>
+
         <div class="table-container card">
           <table class="data-table" id="vehicles-table">
             <thead>
@@ -273,6 +290,23 @@
           </button>
         </div>
 
+        <div class="filter-bar card" style="margin-bottom: 20px; padding: 16px;">
+          <div class="filter-group" style="flex-grow: 3;">
+            <label for="drv-search">Search Drivers</label>
+            <input type="text" id="drv-search" placeholder="Search by name, license number, or category...">
+          </div>
+          <div class="filter-group">
+            <label for="drv-filter-status">Status</label>
+            <select id="drv-filter-status">
+              <option value="">All Statuses</option>
+              <option value="Available">Available</option>
+              <option value="On Trip">On Trip</option>
+              <option value="Off Duty">Off Duty</option>
+              <option value="Suspended">Suspended</option>
+            </select>
+          </div>
+        </div>
+
         <div class="table-container card">
           <table class="data-table" id="drivers-table">
             <thead>
@@ -304,6 +338,23 @@
           <button class="btn btn-primary action-restricted-manager-driver" id="btn-create-trip">
             <i data-lucide="plus-circle"></i> Create New Trip
           </button>
+        </div>
+
+        <div class="filter-bar card" style="margin-bottom: 20px; padding: 16px;">
+          <div class="filter-group" style="flex-grow: 3;">
+            <label for="trip-search">Search Trips</label>
+            <input type="text" id="trip-search" placeholder="Search by ID, route, vehicle, driver...">
+          </div>
+          <div class="filter-group">
+            <label for="trip-filter-status">Status</label>
+            <select id="trip-filter-status">
+              <option value="">All Statuses</option>
+              <option value="Draft">Draft</option>
+              <option value="Dispatched">Dispatched</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
         </div>
 
         <div class="table-container card">
@@ -471,6 +522,7 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-vehicle">
+        <input type="hidden" id="vehicle-edit-id">
         <div class="form-row">
           <div class="form-group col-6">
             <label for="vehicle-reg">Registration Number (Unique)</label>
@@ -512,6 +564,15 @@
             <option value="South">South</option>
             <option value="East">East</option>
             <option value="West">West</option>
+          </select>
+        </div>
+        <div class="form-group" id="vehicle-status-group" style="display: none;">
+          <label for="vehicle-status">Status</label>
+          <select id="vehicle-status">
+            <option value="Available">Available</option>
+            <option value="On Trip">On Trip</option>
+            <option value="In Shop">In Shop</option>
+            <option value="Retired">Retired</option>
           </select>
         </div>
         <div class="modal-footer">
@@ -841,6 +902,9 @@
       </form>
     </div>
   </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toast-container"></div>
 
   <!-- App Logic script -->
   <script src="app.js"></script>

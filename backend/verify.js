@@ -229,6 +229,43 @@ async function runTests() {
     const reportsRes = await request(`${BASE_URL}/reports/analytics`, 'GET', managerHeaders);
     console.log('PASS: Reports loaded. Sample record:', reportsRes.data[0]);
 
+    console.log('\n[TEST 14] Testing Driver license reminder API...');
+    const remindRes = await request(`${BASE_URL}/drivers/${sarah.id}/remind`, 'POST', managerHeaders);
+    if (remindRes.data.email && remindRes.data.email.driver_id === sarah.id) {
+      console.log('PASS: Driver license remind email generated successfully:', remindRes.data.message);
+    } else {
+      console.error('FAIL: Remind API did not generate correct email:', remindRes.data);
+    }
+
+    console.log('\n[TEST 15] Testing Edit Vehicle API...');
+    const editVehRes = await request(`${BASE_URL}/vehicles/VAN-05`, 'PUT', managerHeaders, {
+      name: 'Ford Transit Van 05 - Edited Name',
+      max_load_capacity: 550,
+      acquisition_cost: 36000
+    });
+    if (editVehRes.data.name === 'Ford Transit Van 05 - Edited Name') {
+      console.log('PASS: Vehicle edited successfully.');
+    } else {
+      console.error('FAIL: Vehicle edit did not return edited values:', editVehRes.data);
+    }
+
+    console.log('\n[TEST 16] Testing Document Upload and Document Deletion APIs...');
+    const dbModule = require('./db');
+    const mockDoc = await dbModule.createDocument({
+      vehicle_id: 'VAN-05',
+      document_type: 'Insurance',
+      file_name: 'test_insurance.pdf',
+      file_path: '/uploads/test_insurance.pdf'
+    });
+    console.log('Created mock document:', mockDoc.id);
+
+    const delDocRes = await request(`${BASE_URL}/vehicles/VAN-05/documents/${mockDoc.id}`, 'DELETE', managerHeaders);
+    if (delDocRes.data.id == mockDoc.id) {
+      console.log('PASS: Document deleted successfully.');
+    } else {
+      console.error('FAIL: Document deletion returned incorrect result:', delDocRes.data);
+    }
+
     console.log('\n=== All Automated Verifications Completed Successfully! ===');
   } catch (err) {
     console.error('\nFAIL: Verification script encountered an error:', err);
