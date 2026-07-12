@@ -741,8 +741,9 @@ function setupEventListeners() {
 
 // Helper to parse weights
 function parseCapacityToKg(capacityStr) {
-  if (!capacityStr) return 0;
-  const clean = capacityStr.toLowerCase().trim();
+  if (capacityStr === null || capacityStr === undefined) return 0;
+  if (typeof capacityStr === 'number') return capacityStr;
+  const clean = String(capacityStr).toLowerCase().trim();
   if (clean.includes('ton')) {
     return parseFloat(clean) * 1000;
   }
