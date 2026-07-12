@@ -5,7 +5,9 @@ const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
 const jwt       = require('jsonwebtoken');
-const db        = require('./db_pg');
+const db = (process.env.SUPABASE_URL && process.env.SUPABASE_URL !== 'undefined' && process.env.SUPABASE_URL.startsWith('http') && process.env.SUPABASE_SERVICE_KEY)
+  ? require('./db_pg')
+  : require('./db');
 const authRouter = require('./auth');
 const { sendComplianceReminder } = require('./mailer');
 
@@ -44,7 +46,7 @@ function authenticate(req, res, next) {
   }
   const token = header.split(' ')[1];
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'transitops_jwt_secret_default_key_2026');
     req.user = payload; // { userId, email, role, name }
     next();
   } catch (err) {
@@ -209,7 +211,11 @@ app.post('/api/drivers/:id/remind', authorize(['fleet_manager', 'safety_officer'
     } catch (mailErr) {
       console.error('Compliance email error (non-fatal):', mailErr.message);
     }
-    res.json({ message: `Compliance reminder sent to ${toEmail}.`, recipient: toEmail });
+    res.json({
+      message: `Compliance reminder sent to ${toEmail}.`,
+      recipient: toEmail,
+      email: { driver_id: parseInt(req.params.id) }
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

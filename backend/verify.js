@@ -57,10 +57,13 @@ async function runTests() {
       email: 'manager@transitops.com',
       password: 'password123'
     });
-    console.log('PASS: Logged in successfully. Role:', loginRes.data.role);
+    const userObj = loginRes.data.user || loginRes.data;
+    const token = loginRes.data.accessToken;
+    console.log('PASS: Logged in successfully. Role:', userObj.role);
     managerHeaders = {
-      'x-user-role': loginRes.data.role,
-      'x-user-email': loginRes.data.email
+      'Authorization': token ? `Bearer ${token}` : '',
+      'x-user-role': userObj.role,
+      'x-user-email': userObj.email
     };
 
     // 2. Fetch KPIs

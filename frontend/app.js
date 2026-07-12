@@ -2,7 +2,9 @@
 // TransitOps Frontend Core Logic — JWT Auth Edition
 // ==========================================================================
 
-const API_BASE = window.location.origin + '/api';
+const API_BASE = (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'))
+  ? (window.location.port === '5000' ? '/api' : 'http://localhost:5000/api')
+  : (window.location.origin.startsWith('file://') ? 'http://localhost:5000/api' : '/api');
 
 const ROLE_DISPLAY_LABELS = {
   fleet_manager: 'Fleet Manager',

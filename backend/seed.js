@@ -36,7 +36,7 @@ async function seed() {
 
     console.log('Cleared existing data.');
 
-    // 2. Insert Users
+    const bcrypt = require('bcrypt');
     const users = [
       { email: 'manager@transitops.com', password: 'password123', name: 'Frank Miller (Fleet Mgr)', role: 'fleet_manager' },
       { email: 'driver@transitops.com', password: 'password123', name: 'Raven K.', role: 'dispatcher' },
@@ -45,7 +45,8 @@ async function seed() {
       { email: 'michael@transitops.com', password: 'password123', name: 'Michael Green (Driver)', role: 'driver' }
     ];
     for (const u of users) {
-      await db.createUser(u);
+      const hash = await bcrypt.hash(u.password, 12);
+      await db.createUser({ ...u, password: hash });
     }
     console.log('Seeded Users.');
 
