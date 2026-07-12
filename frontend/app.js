@@ -2024,10 +2024,7 @@ async function handleDocumentUpload(e) {
   formData.append('document_type', docType);
 
   try {
-    await apiCall(`/vehicles/${regNumber}/documents`, {
-      method: 'POST',
-      body: formData
-    });
+    await apiFormCall(`/vehicles/${regNumber}/documents`, formData);
     
     showToast('Document uploaded successfully.', 'success');
     fileInput.value = '';
