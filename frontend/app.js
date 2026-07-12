@@ -2054,7 +2054,7 @@ function exportReportsCSV() {
   const headers = [
     'Vehicle Reg', 'Model Name', 'Type', 'Acquisition Cost',
     'Distance (km)', 'Fuel Consumed (L)', 'Fuel Efficiency (km/L)',
-    'Fuel Cost ($)', 'Maintenance Cost ($)', 'Other Expenses ($)',
+    'Fuel Cost (₹)', 'Maintenance Cost (₹)', 'Other Expenses (₹)',
     'Total Ops Cost (₹)', 'Trip Revenue (₹)', 'ROI (ratio)', 'Extended ROI (%)'
   ];
 
