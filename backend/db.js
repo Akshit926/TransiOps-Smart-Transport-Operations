@@ -28,16 +28,20 @@ try {
 } catch (err) {
   console.warn('TransitOps Warning: Failed to load sqlite3. Falling back to JSON file-based database.', err.message);
   isSQLite = false;
-  // Create data directory for JSON files if it doesn't exist
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  // Initialize files with empty arrays if they don't exist
-  Object.keys(JSON_FILES).forEach(key => {
-    if (!fs.existsSync(JSON_FILES[key])) {
-      fs.writeFileSync(JSON_FILES[key], JSON.stringify([], null, 2));
+  try {
+    // Create data directory for JSON files if it doesn't exist
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-  });
+    // Initialize files with empty arrays if they don't exist
+    Object.keys(JSON_FILES).forEach(key => {
+      if (!fs.existsSync(JSON_FILES[key])) {
+        fs.writeFileSync(JSON_FILES[key], JSON.stringify([], null, 2));
+      }
+    });
+  } catch (fsErr) {
+    console.warn('TransitOps Warning: Could not initialize JSON fallback directories (read-only environment).', fsErr.message);
+  }
 }
 
 // ----------------------------------------------------
