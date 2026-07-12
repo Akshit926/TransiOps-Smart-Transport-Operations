@@ -50,7 +50,7 @@ function initApp() {
   }
   
   // Theme initialization
-  const storedTheme = localStorage.getItem('transitops_theme') || 'dark';
+  const storedTheme = localStorage.getItem('transitops_theme') || 'light';
   document.documentElement.setAttribute('data-theme', storedTheme);
   
   // Initialize Lucide Icons
