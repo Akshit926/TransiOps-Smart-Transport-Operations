@@ -131,8 +131,9 @@ app.get('/api/vehicles', async (req, res) => {
 });
 
 app.post('/api/vehicles', authorize(['fleet_manager']), async (req, res) => {
-  const { registration_number, name, type, max_load_capacity, odometer, acquisition_cost, region } = req.body;
-  if (!registration_number || !name || !type || !max_load_capacity || !odometer || !acquisition_cost || !region) {
+  const { registration_number, name, model, type, max_load_capacity, odometer, acquisition_cost, region } = req.body;
+  const vehicleName = model || name;
+  if (!registration_number || !vehicleName || !type || !max_load_capacity || !odometer || !acquisition_cost || !region) {
     return res.status(400).json({ error: 'All vehicle fields are required.' });
   }
 
@@ -143,7 +144,8 @@ app.post('/api/vehicles', authorize(['fleet_manager']), async (req, res) => {
     }
     const newVehicle = await db.createVehicle({
       registration_number,
-      name,
+      model: vehicleName,
+      name: vehicleName,
       type,
       max_load_capacity: parseFloat(max_load_capacity),
       odometer: parseFloat(odometer),
@@ -477,6 +479,7 @@ app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver']), async
     // Automatically record Fuel Log entry
     await db.createFuelLog({
       vehicle_id: trip.vehicle_id,
+      trip_id: trip.id,
       liters: fuelVal,
       cost: fuelCostVal,
       date: new Date().toISOString().split('T')[0]
@@ -604,7 +607,7 @@ app.get('/api/fuel', async (req, res) => {
 });
 
 app.post('/api/fuel', authorize(['fleet_manager', 'driver']), async (req, res) => {
-  const { vehicle_id, liters, cost, date } = req.body;
+  const { vehicle_id, trip_id, liters, cost, date } = req.body;
   if (!vehicle_id || !liters || !cost || !date) {
     return res.status(400).json({ error: 'All fuel logging fields are required.' });
   }
@@ -612,6 +615,7 @@ app.post('/api/fuel', authorize(['fleet_manager', 'driver']), async (req, res) =
   try {
     const log = await db.createFuelLog({
       vehicle_id,
+      trip_id: trip_id ? parseInt(trip_id) : null,
       liters: parseFloat(liters),
       cost: parseFloat(cost),
       date
@@ -633,7 +637,7 @@ app.get('/api/expenses', async (req, res) => {
 });
 
 app.post('/api/expenses', authorize(['fleet_manager', 'financial_analyst']), async (req, res) => {
-  const { vehicle_id, type, cost, date, description } = req.body;
+  const { vehicle_id, trip_id, type, cost, date, description } = req.body;
   if (!vehicle_id || !type || !cost || !date || !description) {
     return res.status(400).json({ error: 'All expense logging fields are required.' });
   }
@@ -641,6 +645,7 @@ app.post('/api/expenses', authorize(['fleet_manager', 'financial_analyst']), asy
   try {
     const expense = await db.createExpense({
       vehicle_id,
+      trip_id: trip_id ? parseInt(trip_id) : null,
       type,
       cost: parseFloat(cost),
       date,

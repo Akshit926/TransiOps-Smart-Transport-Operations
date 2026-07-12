@@ -422,7 +422,7 @@ module.exports = {
   getTrips: async () => {
     if (isSQLite) {
       return dbAll(`
-        SELECT trips.*, vehicles.name as vehicle_name, drivers.name as driver_name 
+        SELECT trips.*, vehicles.model as vehicle_name, drivers.name as driver_name 
         FROM trips
         LEFT JOIN vehicles ON trips.vehicle_id = vehicles.registration_number
         LEFT JOIN drivers ON trips.driver_id = drivers.id
@@ -515,7 +515,7 @@ module.exports = {
   getMaintenanceLogs: async () => {
     if (isSQLite) {
       return dbAll(`
-        SELECT maintenance_logs.*, vehicles.name as vehicle_name 
+        SELECT maintenance_logs.*, vehicles.model as vehicle_name 
         FROM maintenance_logs
         LEFT JOIN vehicles ON maintenance_logs.vehicle_id = vehicles.registration_number
         ORDER BY maintenance_logs.id DESC
@@ -579,7 +579,7 @@ module.exports = {
   getFuelLogs: async () => {
     if (isSQLite) {
       return dbAll(`
-        SELECT fuel_logs.*, vehicles.name as vehicle_name 
+        SELECT fuel_logs.*, vehicles.model as vehicle_name 
         FROM fuel_logs
         LEFT JOIN vehicles ON fuel_logs.vehicle_id = vehicles.registration_number
         ORDER BY fuel_logs.date DESC, fuel_logs.id DESC
@@ -624,7 +624,7 @@ module.exports = {
   getExpenses: async () => {
     if (isSQLite) {
       return dbAll(`
-        SELECT expenses.*, vehicles.name as vehicle_name 
+        SELECT expenses.*, vehicles.model as vehicle_name 
         FROM expenses
         LEFT JOIN vehicles ON expenses.vehicle_id = vehicles.registration_number
         ORDER BY expenses.date DESC, expenses.id DESC
