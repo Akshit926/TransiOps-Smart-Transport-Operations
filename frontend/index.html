@@ -13,7 +13,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.5">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -33,7 +33,7 @@
           <h3>Target User Roles:</h3>
           <ul>
             <li><span class="bullet manager"></span> Fleet Manager</li>
-            <li><span class="bullet driver"></span> Driver</li>
+            <li><span class="bullet driver"></span> Driver / Dispatcher</li>
             <li><span class="bullet safety"></span> Safety Officer</li>
             <li><span class="bullet finance"></span> Financial Analyst</li>
           </ul>
@@ -44,83 +44,235 @@
       </div>
     </div>
 
-    <!-- Right Column: Sign In Form -->
+    <!-- Right Column: Auth Forms -->
     <div class="login-form-side">
       <div class="form-side-content">
-        <h2>Sign in to your account</h2>
-        <p class="form-subtitle">Enter your credentials to continue</p>
 
-        <!-- Lockout / Error state container -->
-        <div id="login-error-card" class="login-error-card" style="display: none;">
+        <!-- ── TAB SWITCHER ── -->
+        <div class="auth-tabs" id="auth-tabs">
+          <button class="auth-tab active" data-tab="login" onclick="switchAuthTab('login')">Sign In</button>
+          <button class="auth-tab" data-tab="signup" onclick="switchAuthTab('signup')">Sign Up</button>
+        </div>
+
+        <!-- ── ERROR / INFO CARD ── -->
+        <div id="login-error-card" class="login-error-card" style="display:none;">
           <div class="error-card-header">
             <i data-lucide="alert-circle"></i>
-            <strong>Account Lockout Warning</strong>
+            <strong id="login-error-title">Error</strong>
           </div>
-          <p id="login-error-msg">Invalid credentials. Account locked after 5 failed attempts.</p>
+          <p id="login-error-msg"></p>
         </div>
 
-        <form id="login-form">
-          <div class="form-group">
-            <label for="login-email">EMAIL ADDRESS</label>
-            <div class="input-with-icon">
-              <i data-lucide="mail"></i>
-              <input type="email" id="login-email" required placeholder="manager@transitops.com">
+        <!-- ══════════════════════════════════════════ -->
+        <!-- PANEL 1: LOGIN FORM                        -->
+        <!-- ══════════════════════════════════════════ -->
+        <div id="panel-login" class="auth-panel active">
+          <h2>Sign in to your account</h2>
+          <p class="form-subtitle">Enter your credentials to continue</p>
+          <form id="login-form">
+            <div class="form-group">
+              <label for="login-email">EMAIL ADDRESS</label>
+              <div class="input-with-icon">
+                <i data-lucide="mail"></i>
+                <input type="email" id="login-email" required placeholder="you@example.com">
+              </div>
             </div>
-          </div>
-          <div class="form-group">
-            <label for="login-password">PASSWORD</label>
-            <div class="input-with-icon">
-              <i data-lucide="lock"></i>
-              <input type="password" id="login-password" required placeholder="••••••••">
+            <div class="form-group">
+              <label for="login-password">PASSWORD</label>
+              <div class="input-with-icon">
+                <i data-lucide="lock"></i>
+                <input type="password" id="login-password" required placeholder="••••••••">
+                <button type="button" class="pw-toggle" onclick="togglePw('login-password',this)" tabindex="-1"><i data-lucide="eye"></i></button>
+              </div>
             </div>
-          </div>
-          <div class="form-group">
-            <label for="login-role">SELECT ROLE (RBAC)</label>
-            <div class="input-with-icon">
-              <i data-lucide="shield"></i>
-              <select id="login-role" required>
-                <option value="fleet_manager">Fleet Manager</option>
-                <option value="driver">Driver</option>
-                <option value="safety_officer">Safety Officer</option>
-                <option value="financial_analyst">Financial Analyst</option>
-              </select>
+            <div class="form-actions-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="login-remember"><span>Remember me</span>
+              </label>
+              <a href="#" class="forgot-link" id="forgot-link" onclick="showPanel('forgot')">Forgot password?</a>
             </div>
-          </div>
-          
-          <div class="form-actions-row">
-            <label class="checkbox-label">
-              <input type="checkbox" id="login-remember">
-              <span>Remember me</span>
-            </label>
-            <a href="#" class="forgot-link" onclick="showToast('Password recovery module not configured.', 'warning')">Forgot password?</a>
-          </div>
+            <button type="submit" class="btn btn-primary btn-block btn-signin">Sign In</button>
+          </form>
 
-          <button type="submit" class="btn btn-primary btn-block btn-signin">Sign In</button>
-        </form>
-
-        <div class="quick-login-section">
-          <p class="quick-login-title">Quick Demo Login Shortcuts</p>
-          <div class="quick-login-grid">
-            <button class="btn btn-outline quick-login-btn" data-email="manager@transitops.com" data-role="fleet_manager">
-              <i data-lucide="shield-check"></i><span>Fleet Mgr</span>
-            </button>
-            <button class="btn btn-outline quick-login-btn" data-email="driver@transitops.com" data-role="driver">
-              <i data-lucide="navigation"></i><span>Driver</span>
-            </button>
-            <button class="btn btn-outline quick-login-btn" data-email="safety@transitops.com" data-role="safety_officer">
-              <i data-lucide="shield-alert"></i><span>Safety Off</span>
-            </button>
-            <button class="btn btn-outline quick-login-btn" data-email="finance@transitops.com" data-role="financial_analyst">
-              <i data-lucide="dollar-sign"></i><span>Finance</span>
-            </button>
-            <button class="btn btn-outline quick-login-btn" data-email="michael@transitops.com" data-role="driver">
-              <i data-lucide="truck"></i><span>Driver</span>
-            </button>
+          <div class="quick-login-section">
+            <p class="quick-login-title">Quick Demo Login Shortcuts</p>
+            <div class="quick-login-grid">
+              <button class="btn btn-outline quick-login-btn" data-email="manager@transitops.com" data-role="fleet_manager">
+                <i data-lucide="shield-check"></i><span>Fleet Mgr</span>
+              </button>
+              <button class="btn btn-outline quick-login-btn" data-email="driver@transitops.com" data-role="driver">
+                <i data-lucide="navigation"></i><span>Driver</span>
+              </button>
+              <button class="btn btn-outline quick-login-btn" data-email="safety@transitops.com" data-role="safety_officer">
+                <i data-lucide="shield-alert"></i><span>Safety Off</span>
+              </button>
+              <button class="btn btn-outline quick-login-btn" data-email="finance@transitops.com" data-role="financial_analyst">
+                <i data-lucide="dollar-sign"></i><span>Finance</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
+
+        <!-- ══════════════════════════════════════════ -->
+        <!-- PANEL 2: SIGNUP FORM                       -->
+        <!-- ══════════════════════════════════════════ -->
+        <div id="panel-signup" class="auth-panel">
+          <h2>Create your account</h2>
+          <p class="form-subtitle">Join TransitOps — get started in seconds</p>
+          <form id="signup-form">
+            <div class="form-group">
+              <label for="signup-name">FULL NAME</label>
+              <div class="input-with-icon">
+                <i data-lucide="user"></i>
+                <input type="text" id="signup-name" required placeholder="e.g. Frank Miller">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-email">EMAIL ADDRESS</label>
+              <div class="input-with-icon">
+                <i data-lucide="mail"></i>
+                <input type="email" id="signup-email" required placeholder="you@example.com">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-phone">PHONE NUMBER (optional)</label>
+              <div class="input-with-icon">
+                <i data-lucide="phone"></i>
+                <input type="tel" id="signup-phone" placeholder="+91 9000000000">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-role">YOUR ROLE</label>
+              <div class="input-with-icon">
+                <i data-lucide="shield"></i>
+                <select id="signup-role" required>
+                  <option value="fleet_manager">Fleet Manager</option>
+                  <option value="driver">Driver</option>
+                  <option value="safety_officer">Safety Officer</option>
+                  <option value="financial_analyst">Financial Analyst</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="signup-password">PASSWORD</label>
+              <div class="input-with-icon">
+                <i data-lucide="lock"></i>
+                <input type="password" id="signup-password" required placeholder="Min 8 chars, 1 upper, 1 number, 1 symbol">
+                <button type="button" class="pw-toggle" onclick="togglePw('signup-password',this)" tabindex="-1"><i data-lucide="eye"></i></button>
+              </div>
+              <div class="pw-strength-bar" id="pw-strength-bar">
+                <div class="pw-strength-fill" id="pw-strength-fill"></div>
+              </div>
+              <p class="pw-strength-label" id="pw-strength-label"></p>
+            </div>
+            <div class="form-group">
+              <label for="signup-confirm">CONFIRM PASSWORD</label>
+              <div class="input-with-icon">
+                <i data-lucide="lock"></i>
+                <input type="password" id="signup-confirm" required placeholder="••••••••">
+                <button type="button" class="pw-toggle" onclick="togglePw('signup-confirm',this)" tabindex="-1"><i data-lucide="eye"></i></button>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-signin">Create Account</button>
+          </form>
+        </div>
+
+        <!-- ══════════════════════════════════════════ -->
+        <!-- PANEL 3: OTP VERIFICATION                  -->
+        <!-- ══════════════════════════════════════════ -->
+        <div id="panel-otp" class="auth-panel">
+          <div class="otp-icon-wrap"><i data-lucide="mail-check"></i></div>
+          <h2>Enter Verification Code</h2>
+          <p class="form-subtitle" id="otp-subtitle">We sent a 6-digit code to your email</p>
+          <form id="otp-form">
+            <div class="otp-boxes" id="otp-boxes">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]">
+              <input type="text" maxlength="1" class="otp-box" inputmode="numeric" pattern="[0-9]">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-signin" style="margin-top:20px;">Verify Code</button>
+          </form>
+          <div class="resend-row">
+            <span id="resend-timer" class="resend-timer"></span>
+            <button id="resend-btn" class="resend-btn" onclick="resendOTP()" disabled>Resend Code</button>
+          </div>
+          <button class="back-link" onclick="goBackFromOTP()">← Back</button>
+        </div>
+
+        <!-- ══════════════════════════════════════════ -->
+        <!-- PANEL 4: FORGOT PASSWORD                   -->
+        <!-- ══════════════════════════════════════════ -->
+        <div id="panel-forgot" class="auth-panel">
+          <div class="otp-icon-wrap"><i data-lucide="key-round"></i></div>
+          <h2>Reset Password</h2>
+          <p class="form-subtitle">Enter your email and we'll send a reset code</p>
+          <form id="forgot-form">
+            <div class="form-group">
+              <label for="forgot-email">EMAIL ADDRESS</label>
+              <div class="input-with-icon">
+                <i data-lucide="mail"></i>
+                <input type="email" id="forgot-email" required placeholder="you@example.com">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-signin">Send Reset Code</button>
+          </form>
+          <button class="back-link" onclick="showPanel('login')">← Back to Sign In</button>
+        </div>
+
+        <!-- ══════════════════════════════════════════ -->
+        <!-- PANEL 5: PASSWORD RESET                    -->
+        <!-- ══════════════════════════════════════════ -->
+        <div id="panel-reset" class="auth-panel">
+          <div class="otp-icon-wrap success"><i data-lucide="shield-check"></i></div>
+          <h2>Set New Password</h2>
+          <p class="form-subtitle">Code verified. Choose a strong new password.</p>
+          <form id="reset-form">
+            <div class="form-group">
+              <label for="reset-password">NEW PASSWORD</label>
+              <div class="input-with-icon">
+                <i data-lucide="lock"></i>
+                <input type="password" id="reset-password" required placeholder="Min 8 chars, 1 upper, 1 number, 1 symbol">
+                <button type="button" class="pw-toggle" onclick="togglePw('reset-password',this)" tabindex="-1"><i data-lucide="eye"></i></button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="reset-confirm">CONFIRM PASSWORD</label>
+              <div class="input-with-icon">
+                <i data-lucide="lock"></i>
+                <input type="password" id="reset-confirm" required placeholder="••••••••">
+                <button type="button" class="pw-toggle" onclick="togglePw('reset-confirm',this)" tabindex="-1"><i data-lucide="eye"></i></button>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-signin">Reset Password</button>
+          </form>
+        </div>
+
+        <!-- ══════════════════════════════════════════ -->
+        <!-- PANEL 6: ACCOUNT FROZEN                    -->
+        <!-- ══════════════════════════════════════════ -->
+        <div id="panel-frozen" class="auth-panel">
+          <div class="otp-icon-wrap danger"><i data-lucide="lock-keyhole"></i></div>
+          <h2>Account Locked</h2>
+          <p class="form-subtitle">Too many failed attempts. Enter your email to unlock your account via email code.</p>
+          <form id="unfreeze-form">
+            <div class="form-group">
+              <label for="unfreeze-email">EMAIL ADDRESS</label>
+              <div class="input-with-icon">
+                <i data-lucide="mail"></i>
+                <input type="email" id="unfreeze-email" required placeholder="your.email@example.com">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-signin">Send Unlock Code</button>
+          </form>
+          <button class="back-link" onclick="showPanel('login')">← Back to Sign In</button>
+        </div>
+
+      </div><!-- /form-side-content -->
+    </div><!-- /login-form-side -->
+  </div><!-- /login-screen -->
 
   <!-- ==================== MAIN APPLICATION CONTAINER ==================== -->
   <div id="app-container" class="app-layout" style="display: none;">
@@ -167,9 +319,6 @@
         </a>
         <a href="#analytics" class="nav-item" data-view="reports" id="nav-reports">
           <i data-lucide="bar-chart-3"></i><span>Analytics & ROI</span>
-        </a>
-        <a href="#driver-portal" class="nav-item" data-view="driver_portal" id="nav-driver-portal">
-          <i data-lucide="user"></i><span>My Portal</span>
         </a>
         <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
           <i data-lucide="settings"></i><span>Settings & RBAC</span>
@@ -447,14 +596,6 @@
           </button>
         </div>
 
-        <!-- Drivers Safety Leaderboard Widget (Advanced UX Feature) -->
-        <div class="card" id="drivers-leaderboard-card" style="margin-bottom: 24px;">
-          <h3 style="margin-bottom:12px;">Top Drivers Safety Leaderboard</h3>
-          <div class="leaderboard-cards-grid" id="leaderboard-cards-container">
-            <!-- Rendered dynamically in JS -->
-          </div>
-        </div>
-
         <!-- Filter bar -->
         <div class="filter-bar card">
           <div class="filter-group flex-grow-3">
@@ -619,64 +760,7 @@
             <p>Submit repair entries, update active maintenance tickets, and trace fleet resolve rates</p>
           </div>
         </div>
- 
-        <!-- =========================================================
-             NEW SECTION START: Maintenance Summary KPIs
-             (Presentational only — existing form/table below still
-             own all live data via app.js. IDs below are new and do
-             not collide with, rename, or remove any existing hook.)
-        ========================================================== -->
-        <section class="kpi-grid maintenance-summary-four" aria-label="Maintenance Summary">
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-inshop"><i data-lucide="indian-rupee"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">TOTAL MAINTENANCE COST</span>
-              <h2 class="kpi-value" id="maint-summary-total-cost">₹0</h2>
-            </div>
-          </article>
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-draft"><i data-lucide="clipboard-list"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">OPEN MAINTENANCE JOBS</span>
-              <h2 class="kpi-value" id="maint-summary-open-jobs">0</h2>
-            </div>
-          </article>
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-available"><i data-lucide="check-circle-2"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">COMPLETED MAINTENANCE</span>
-              <h2 class="kpi-value" id="maint-summary-completed">0</h2>
-            </div>
-          </article>
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-ontrip"><i data-lucide="wrench"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">VEHICLES IN SHOP</span>
-              <h2 class="kpi-value" id="maint-summary-in-shop">0</h2>
-            </div>
-          </article>
-        </section>
- 
-        <!-- Quick Actions -->
-        <section class="card quick-actions-card" aria-label="Maintenance Quick Actions">
-          <h3>Quick Actions</h3>
-          <div class="quick-actions-row">
-            <button type="button" class="btn btn-primary" id="qa-add-maintenance"
-              onclick="document.getElementById('maint-desc') && document.getElementById('maint-desc').focus();">
-              <i data-lucide="wrench"></i> Add Maintenance
-            </button>
-            <button type="button" class="btn btn-outline" id="qa-add-fuel-log"
-              onclick="document.getElementById('nav-expenses') && document.getElementById('nav-expenses').click(); setTimeout(function(){ var b = document.getElementById('btn-log-fuel'); if (b) b.click(); }, 50);">
-              <i data-lucide="fuel"></i> Add Fuel Log
-            </button>
-            <button type="button" class="btn btn-outline" id="qa-view-expense-report"
-              onclick="document.getElementById('nav-reports') && document.getElementById('nav-reports').click();">
-              <i data-lucide="bar-chart-3"></i> View Expense Report
-            </button>
-          </div>
-        </section>
-        <!-- NEW SECTION END: Maintenance Summary KPIs -->
- 
+
         <!-- Split Layout matching Image 6 -->
         <div class="maintenance-split-row">
           <!-- Left: Log form -->
@@ -708,17 +792,17 @@
                   <option value="Closed">Closed</option>
                 </select>
               </div>
- 
+
               <button type="submit" class="btn btn-primary btn-block" style="margin-top:15px;">Save Service Record</button>
             </form>
- 
+
             <div class="maint-flow-guide">
               <div class="flow-line"><span class="label green-text">Available</span> <span class="arrow">&rarr; (creating active record) &rarr;</span> <span class="label orange-text">In Shop</span></div>
               <div class="flow-line"><span class="label orange-text">In Shop</span> <span class="arrow">&rarr; (closing record [w/o retired]) &rarr;</span> <span class="label green-text">Available</span></div>
               <p class="note">Note: In Shop vehicles are removed from the dispatch pool.</p>
             </div>
           </div>
- 
+
           <!-- Right: Service Logs table -->
           <div class="maintenance-table-col card">
             <h3>Active & Historical Service Logs</h3>
@@ -740,73 +824,8 @@
             </div>
           </div>
         </div>
- 
-        <!-- =========================================================
-             NEW SECTION START: Recent Maintenance Table
-             (Independent preview widget — new IDs only, existing
-             #maintenance-table above is untouched and still driven
-             by app.js exactly as before.)
-        ========================================================== -->
-        <section class="card" aria-label="Recent Maintenance" style="margin-top: 24px;">
-          <div class="card-header-with-action">
-            <h3>Recent Maintenance</h3>
-          </div>
- 
-          <!-- Search box + filter dropdown -->
-          <div class="filter-bar" style="margin-top: 15px; padding: 0; box-shadow: none; border: none;">
-            <div class="filter-group flex-grow-3">
-              <input type="text" id="maint-recent-search" placeholder="Search vehicle or service description...">
-            </div>
-            <div class="filter-group">
-              <select id="maint-recent-filter">
-                <option value="">Status: All</option>
-                <option value="Active">Active</option>
-                <option value="Closed">Closed</option>
-              </select>
-            </div>
-          </div>
- 
-          <div class="table-container" style="margin-top: 15px;">
-            <table class="data-table" id="maintenance-recent-table">
-              <thead>
-                <tr>
-                  <th>Vehicle</th>
-                  <th>Description</th>
-                  <th>Date</th>
-                  <th>Cost (₹)</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Sample preview rows — replace with live data once wired to app.js -->
-                <tr>
-                  <td>VAN-05 (GJ01AB452)</td>
-                  <td>Oil Change</td>
-                  <td>2026-07-08</td>
-                  <td>₹2,500</td>
-                  <td><span class="status-pill status-closed">Closed</span></td>
-                </tr>
-                <tr>
-                  <td>TRK-02 (GJ01CD119)</td>
-                  <td>Brake Pad Replacement</td>
-                  <td>2026-07-10</td>
-                  <td>₹4,800</td>
-                  <td><span class="status-pill status-active">Active</span></td>
-                </tr>
-                <tr>
-                  <td>MINI-11 (GJ01EF773)</td>
-                  <td>Engine Diagnostic</td>
-                  <td>2026-07-11</td>
-                  <td>₹1,200</td>
-                  <td><span class="status-pill status-active">Active</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <!-- NEW SECTION END: Recent Maintenance Table -->
       </section>
- 
+
       <!-- ==================== VIEW: 6. FUEL & EXPENSE MANAGEMENT ==================== -->
       <section id="view-expenses" class="app-view" style="display: none;">
         <div class="view-header-premium">
@@ -823,68 +842,7 @@
             </button>
           </div>
         </div>
- 
-        <!-- =========================================================
-             NEW SECTION START: Fuel Summary + Operational Cost Card + Quick Actions
-             (Presentational additions only. The existing #fuel-table,
-             #expenses-table and #calc-total-ops-cost element below are
-             fully preserved — #calc-total-ops-cost has simply been
-             relocated into the Operational Cost Card here so it reads
-             as a proper summary card; its id and app.js binding are
-             unchanged.)
-        ========================================================== -->
-        <section class="kpi-grid fuel-summary-three" aria-label="Fuel Summary">
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-ontrip"><i data-lucide="fuel"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">TOTAL FUEL COST</span>
-              <h2 class="kpi-value" id="fuel-summary-total-cost">₹0</h2>
-            </div>
-          </article>
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-draft"><i data-lucide="calendar-check"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">FUEL LOGS THIS MONTH</span>
-              <h2 class="kpi-value" id="fuel-summary-logs-month">0</h2>
-            </div>
-          </article>
-          <article class="kpi-card">
-            <div class="kpi-card-header-icon color-available"><i data-lucide="droplet"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">AVG. FUEL PER VEHICLE</span>
-              <h2 class="kpi-value" id="fuel-summary-avg-per-vehicle">0 L</h2>
-            </div>
-          </article>
-        </section>
- 
-        <!-- Operational Cost Card: Total Operational Cost = Fuel Cost + Maintenance Cost -->
-        <section class="card operational-cost-card" aria-label="Operational Cost">
-          <div class="total-operational-calc-row">
-            <span>TOTAL OPERATIONAL COST (AUTO) = FUEL + MAINT</span>
-            <span class="calc-total-value" id="calc-total-ops-cost">₹0</span>
-          </div>
-        </section>
- 
-        <!-- Quick Actions -->
-        <section class="card quick-actions-card" aria-label="Fuel & Expense Quick Actions">
-          <h3>Quick Actions</h3>
-          <div class="quick-actions-row">
-            <button type="button" class="btn btn-primary" id="qa-exp-add-maintenance"
-              onclick="document.getElementById('nav-maintenance') && document.getElementById('nav-maintenance').click();">
-              <i data-lucide="wrench"></i> Add Maintenance
-            </button>
-            <button type="button" class="btn btn-outline" id="qa-exp-add-fuel-log"
-              onclick="document.getElementById('btn-log-fuel') && document.getElementById('btn-log-fuel').click();">
-              <i data-lucide="fuel"></i> Add Fuel Log
-            </button>
-            <button type="button" class="btn btn-outline" id="qa-exp-view-expense-report"
-              onclick="document.getElementById('nav-reports') && document.getElementById('nav-reports').click();">
-              <i data-lucide="bar-chart-3"></i> View Expense Report
-            </button>
-          </div>
-        </section>
-        <!-- NEW SECTION END: Fuel Summary + Operational Cost Card + Quick Actions -->
- 
+
         <div class="expenses-split-row card" style="padding:0;">
           <!-- Top half: Fuel Logs -->
           <div class="expenses-top-block" style="padding: 24px; border-bottom: 1px solid var(--border-color);">
@@ -905,7 +863,7 @@
               </table>
             </div>
           </div>
- 
+
           <!-- Bottom half: Other Expenses -->
           <div class="expenses-bottom-block" style="padding: 24px;">
             <h3>Operational Expenses Breakdown (Tolls / Maintenance)</h3>
@@ -926,75 +884,14 @@
                 </tbody>
               </table>
             </div>
-            <!-- Note: the auto-calculated Total Operational Cost figure now lives in the
-                 Operational Cost Card at the top of this view (id="calc-total-ops-cost"),
-                 so app.js continues to update the exact same element as before. -->
+            
+            <div class="total-operational-calc-row">
+              <span>TOTAL OPERATIONAL COST (AUTO) = FUEL + MAINT</span>
+              <span class="calc-total-value" id="calc-total-ops-cost">₹0</span>
+            </div>
           </div>
         </div>
- 
-        <!-- =========================================================
-             NEW SECTION START: Recent Fuel Logs Table
-             (Independent preview widget — new IDs only, existing
-             #fuel-table above is untouched and still driven by
-             app.js exactly as before.)
-        ========================================================== -->
-        <section class="card" aria-label="Recent Fuel Logs" style="margin-top: 24px;">
-          <div class="card-header-with-action">
-            <h3>Recent Fuel Logs</h3>
-          </div>
- 
-          <!-- Search box + filter dropdown -->
-          <div class="filter-bar" style="margin-top: 15px; padding: 0; box-shadow: none; border: none;">
-            <div class="filter-group flex-grow-3">
-              <input type="text" id="fuel-recent-search" placeholder="Search vehicle...">
-            </div>
-            <div class="filter-group">
-              <select id="fuel-recent-filter">
-                <option value="">Sort: Newest First</option>
-                <option value="oldest">Sort: Oldest First</option>
-                <option value="cost-high">Sort: Highest Cost</option>
-                <option value="cost-low">Sort: Lowest Cost</option>
-              </select>
-            </div>
-          </div>
- 
-          <div class="table-container" style="margin-top: 15px;">
-            <table class="data-table" id="fuel-recent-table">
-              <thead>
-                <tr>
-                  <th>Vehicle</th>
-                  <th>Liters</th>
-                  <th>Cost (₹)</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Sample preview rows — replace with live data once wired to app.js -->
-                <tr>
-                  <td>VAN-05 (GJ01AB452)</td>
-                  <td>45.0 L</td>
-                  <td>₹3,150</td>
-                  <td>2026-07-09</td>
-                </tr>
-                <tr>
-                  <td>TRK-02 (GJ01CD119)</td>
-                  <td>72.5 L</td>
-                  <td>₹5,075</td>
-                  <td>2026-07-10</td>
-                </tr>
-                <tr>
-                  <td>MINI-11 (GJ01EF773)</td>
-                  <td>28.0 L</td>
-                  <td>₹1,960</td>
-                  <td>2026-07-11</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <!-- NEW SECTION END: Recent Fuel Logs Table -->
       </section>
- 
 
       <!-- ==================== VIEW: 7. REPORTS & ANALYTICS ==================== -->
       <section id="view-reports" class="app-view" style="display: none;">
@@ -1085,204 +982,6 @@
               <!-- Injected by JS -->
             </tbody>
           </table>
-        </div>
-      </section>
-
-      <!-- ==================== VIEW: 7B. DRIVER PORTAL ==================== -->
-      <section id="view-driver_portal" class="app-view" style="display: none;">
-        <div class="view-header">
-          <div>
-            <h1 id="driver-portal-welcome">Welcome back, Driver!</h1>
-            <p class="subtitle">Your active assignments, compliance records, and vehicle statistics</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-outline" id="driver-portal-log-fuel">
-              <i data-lucide="droplet"></i><span>Log Fuel Receipt</span>
-            </button>
-            <button class="btn btn-outline" id="driver-portal-log-expense">
-              <i data-lucide="receipt"></i><span>Log Expense</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="dashboard-split-row">
-          <!-- Left Column: Profile Card & Safety Score & Assigned Vehicle -->
-          <div class="dashboard-right-col" style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 20px;">
-            <!-- Driver Profile & Compliance Card -->
-            <div class="card" style="padding: 20px;">
-              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="user-check" style="color: var(--color-ontrip);"></i>
-                My Profile & Compliance
-              </h3>
-              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">License Category</span>
-                  <strong id="driver-my-license-category">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">License Expiry</span>
-                  <strong id="driver-my-license-expiry">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">Contact Number</span>
-                  <strong id="driver-my-contact">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">Duty Status</span>
-                  <span id="driver-my-status" class="badge available">-</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Safety Score Card -->
-            <div class="card" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 15px;">
-              <h3 style="align-self: flex-start; margin-bottom: 5px;">My Safety Performance</h3>
-              <div style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center;">
-                <svg width="120" height="120" viewBox="0 0 120 120" style="transform: rotate(-90deg);">
-                  <circle cx="60" cy="60" r="50" fill="transparent" stroke="var(--border-color)" stroke-width="10" />
-                  <circle id="driver-safety-circle" cx="60" cy="60" r="50" fill="transparent" stroke="var(--color-available)" stroke-width="10" 
-                          stroke-dasharray="314.16" stroke-dashoffset="314.16" style="transition: stroke-dashoffset 0.5s ease-out;" />
-                </svg>
-                <div style="position: absolute; display: flex; flex-direction: column; align-items: center;">
-                  <span id="driver-safety-percentage" style="font-size: 28px; font-weight: 700; color: var(--text-primary);">0%</span>
-                  <span style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Score</span>
-                </div>
-              </div>
-              <p id="driver-safety-feedback" style="font-size: 13px; color: var(--text-secondary); font-style: italic;">
-                Drive safely to maintain a high performance score!
-              </p>
-            </div>
-
-            <!-- Assigned Vehicle Card -->
-            <div class="card" style="padding: 20px;">
-              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="truck" style="color: var(--color-ontrip);"></i>
-                My Assigned Vehicle
-              </h3>
-              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">Model</span>
-                  <strong id="driver-vehicle-model">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">Registration No.</span>
-                  <strong id="driver-vehicle-reg">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">Type</span>
-                  <strong id="driver-vehicle-type">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-                  <span style="color: var(--text-secondary);">Odometer</span>
-                  <strong id="driver-vehicle-odometer">-</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Right Column: Active Trip Card & Past Trips -->
-          <div class="dashboard-left-col" style="flex: 2 1 600px; display: flex; flex-direction: column; gap: 20px;">
-            <!-- Active Assignment -->
-            <div class="card" style="padding: 20px;">
-              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="navigation" style="color: var(--color-ontrip);"></i>
-                Active Assignment
-              </h3>
-              <div id="driver-portal-active-trip-container">
-                <!-- Dynamically loaded -->
-              </div>
-            </div>
-
-            <!-- Past Assignments -->
-            <div class="card" style="padding: 20px;">
-              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="history" style="color: var(--text-secondary);"></i>
-                My Trip History
-              </h3>
-              <div class="table-container">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Trip ID</th>
-                      <th>Route</th>
-                      <th>Vehicle</th>
-                      <th>Cargo Weight</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="driver-portal-past-trips">
-                    <tr><td colspan="5" style="text-align:center;">No past trips recorded.</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Driver Logged Costs -->
-            <div class="card" style="padding: 20px;">
-              <h3 style="margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                <span style="display: flex; align-items: center; gap: 8px;">
-                  <i data-lucide="wallet" style="color: var(--color-available);"></i>
-                  My Logged Costs
-                </span>
-                <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);" id="driver-logged-costs-summary">Total: ₹0</span>
-              </h3>
-              <div style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 15px;" id="driver-logged-costs-trip-scope">
-                Showing costs for: None
-              </div>
-              
-              <!-- Tab Navigation -->
-              <div class="driver-cost-tabs" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 15px; gap: 15px;">
-                <button class="driver-cost-tab-btn active" onclick="switchDriverCostTab('fuel')" id="btn-driver-cost-tab-fuel" style="background: none; border: none; color: var(--text-muted); padding: 8px 12px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">
-                  <i data-lucide="droplet" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Fuel Logs
-                </button>
-                <button class="driver-cost-tab-btn" onclick="switchDriverCostTab('expenses')" id="btn-driver-cost-tab-expenses" style="background: none; border: none; color: var(--text-muted); padding: 8px 12px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">
-                  <i data-lucide="receipt" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Other Expenses
-                </button>
-              </div>
-
-              <!-- Tab Content: Fuel Logs -->
-              <div id="driver-cost-content-fuel" class="driver-cost-tab-content">
-                <div class="table-container">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Vehicle</th>
-                        <th>Liters</th>
-                        <th>Cost (₹)</th>
-                        <th>Trip ID</th>
-                      </tr>
-                    </thead>
-                    <tbody id="driver-portal-fuel-logs">
-                      <tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No fuel logs recorded.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- Tab Content: Expenses -->
-              <div id="driver-cost-content-expenses" class="driver-cost-tab-content" style="display: none;">
-                <div class="table-container">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Vehicle</th>
-                        <th>Type</th>
-                        <th>Cost (₹)</th>
-                        <th>Description</th>
-                        <th>Trip ID</th>
-                      </tr>
-                    </thead>
-                    <tbody id="driver-portal-expenses">
-                      <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No other expenses recorded.</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-          </div>
         </div>
       </section>
 
@@ -1618,7 +1317,6 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-fuel">
-        <input type="hidden" id="fuel-trip-id">
         <div class="form-group">
           <label for="fuel-vehicle">Select Vehicle</label>
           <select id="fuel-vehicle" required>
@@ -1655,7 +1353,6 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-expense">
-        <input type="hidden" id="expense-trip-id">
         <div class="form-group">
           <label for="expense-vehicle">Select Vehicle</label>
           <select id="expense-vehicle" required>

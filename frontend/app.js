@@ -1,313 +1,583 @@
 // ==========================================================================
-// TransitOps Frontend Core Logic (Aligned with Excalidraw Mockups)
+// TransitOps Frontend Core Logic — JWT Auth Edition
 // ==========================================================================
 
 const API_BASE = 'http://localhost:5000/api';
 
 const ROLE_DISPLAY_LABELS = {
-  fleet_manager: 'Fleet Manager',
-  driver: 'Driver',
-  safety_officer: 'Safety Officer',
-  financial_analyst: 'Financial Analyst'
+  fleet_manager:    'Fleet Manager',
+  driver:           'Driver',
+  safety_officer:   'Safety Officer',
+  financial_analyst:'Financial Analyst'
 };
 
 // Global Application State
 const state = {
-  currentUser: null,
-  activeView: 'dashboard',
-  vehicles: [],
-  drivers: [],
-  trips: [],
-  maintenance: [],
-  fuelLogs: [],
-  expenses: [],
-  reports: [],
+  currentUser:    null,
+  accessToken:    null,
+  refreshToken:   null,
+  activeView:     'dashboard',
+  vehicles:       [],
+  drivers:        [],
+  trips:          [],
+  maintenance:    [],
+  fuelLogs:       [],
+  expenses:       [],
+  reports:        [],
   selectedDriverId: null,
-  // Sorting Configuration
   sort: {
     vehicles: { column: null, direction: 'asc' },
-    drivers: { column: null, direction: 'asc' },
-    trips: { column: null, direction: 'asc' },
-    reports: { column: null, direction: 'asc' }
+    drivers:  { column: null, direction: 'asc' },
+    trips:    { column: null, direction: 'asc' },
+    reports:  { column: null, direction: 'asc' }
   },
-  // Chart instances
-  charts: {
-    revenue: null
-  }
+  charts: { revenue: null },
+  // Auth flow state
+  _otpEmail:   null,
+  _otpPurpose: null, // 'signup' | 'reset' | 'unfreeze'
+  _resendTimer: null
 };
 
-// ----------------------------------------------------
-// INITIALIZATION & LOGIN
-// ----------------------------------------------------
+// ─────────────────────────────────────────────────────
+// TOKEN STORAGE HELPERS
+// ─────────────────────────────────────────────────────
+function saveSession(user, access, refresh) {
+  state.currentUser  = user;
+  state.accessToken  = access;
+  state.refreshToken = refresh;
+  localStorage.setItem('transitops_user',          JSON.stringify(user));
+  localStorage.setItem('transitops_access_token',  access);
+  localStorage.setItem('transitops_refresh_token', refresh);
+}
+
+function loadSession() {
+  const user    = localStorage.getItem('transitops_user');
+  const access  = localStorage.getItem('transitops_access_token');
+  const refresh = localStorage.getItem('transitops_refresh_token');
+  if (user && access) {
+    state.currentUser  = JSON.parse(user);
+    state.accessToken  = access;
+    state.refreshToken = refresh;
+    return true;
+  }
+  return false;
+}
+
+function clearSession() {
+  state.currentUser  = null;
+  state.accessToken  = null;
+  state.refreshToken = null;
+  localStorage.removeItem('transitops_user');
+  localStorage.removeItem('transitops_access_token');
+  localStorage.removeItem('transitops_refresh_token');
+}
+
+// ─────────────────────────────────────────────────────
+// API HELPERS (all send Bearer token)
+// ─────────────────────────────────────────────────────
+async function refreshAccessToken() {
+  if (!state.refreshToken) return false;
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: state.refreshToken })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    state.accessToken  = data.accessToken;
+    state.refreshToken = data.refreshToken;
+    localStorage.setItem('transitops_access_token',  data.accessToken);
+    localStorage.setItem('transitops_refresh_token', data.refreshToken);
+    return true;
+  } catch { return false; }
+}
+
+async function apiJSONCall(endpoint, method = 'GET', body = null, retry = true) {
+  const opts = {
+    method,
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${state.accessToken}`
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  let res = await fetch(`${API_BASE}${endpoint}`, opts);
+  if (res.status === 401 && retry) {
+    const ok = await refreshAccessToken();
+    if (ok) return apiJSONCall(endpoint, method, body, false);
+    clearSession(); showLoginLayout(); throw new Error('Session expired. Please log in again.');
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+async function apiFormCall(endpoint, formData, retry = true) {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${state.accessToken}` },
+    body:    formData
+  });
+  if (res.status === 401 && retry) {
+    const ok = await refreshAccessToken();
+    if (ok) return apiFormCall(endpoint, formData, false);
+    clearSession(); showLoginLayout(); throw new Error('Session expired.');
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Upload failed');
+  return data;
+}
+
+// ─────────────────────────────────────────────────────
+// INITIALIZATION
+// ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
   setupEventListeners();
 });
 
 function initApp() {
-  // Check if session is stored
-  const storedUser = localStorage.getItem('transitops_user');
-  if (storedUser) {
-    state.currentUser = JSON.parse(storedUser);
+  const storedTheme = localStorage.getItem('transitops_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', storedTheme);
+
+  if (loadSession()) {
     showAppLayout();
-    const landing = getLandingViewForRole(state.currentUser.role);
-    navigateTo(landing);
+    navigateTo(getLandingViewForRole(state.currentUser.role));
   } else {
     showLoginLayout();
   }
-  
-  // Theme initialization
-  const storedTheme = localStorage.getItem('transitops_theme') || 'light';
-  document.documentElement.setAttribute('data-theme', storedTheme);
-  
-  // Initialize Lucide Icons
   lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────
+// AUTH PANEL NAVIGATION
+// ─────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(`panel-${name}`);
+  if (panel) panel.classList.add('active');
+  // Show/hide tab bar
+  const tabs = document.getElementById('auth-tabs');
+  if (tabs) tabs.style.display = (name === 'login' || name === 'signup') ? 'flex' : 'none';
+  // Clear errors
+  document.getElementById('login-error-card').style.display = 'none';
+  lucide.createIcons();
+}
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.auth-tab[data-tab="${tab}"]`).classList.add('active');
+  showPanel(tab);
 }
 
 function showLoginLayout() {
   document.getElementById('login-screen').style.display = 'grid';
   document.getElementById('app-container').style.display = 'none';
+  showPanel('login');
+  lucide.createIcons();
 }
 
+function showAuthError(msg, title = 'Error') {
+  const card = document.getElementById('login-error-card');
+  document.getElementById('login-error-title').textContent = title;
+  document.getElementById('login-error-msg').textContent = msg;
+  card.style.display = 'block';
+}
+
+// ─────────────────────────────────────────────────────
+// PASSWORD HELPERS (strength meter + show/hide)
+// ─────────────────────────────────────────────────────
+function togglePw(inputId, btn) {
+  const input = document.getElementById(inputId);
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  btn.innerHTML = isHidden ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>';
+  lucide.createIcons();
+}
+
+function checkPasswordStrength(pw) {
+  let score = 0;
+  if (pw.length >= 8)            score++;
+  if (/[A-Z]/.test(pw))         score++;
+  if (/[0-9]/.test(pw))         score++;
+  if (/[^A-Za-z0-9]/.test(pw))  score++;
+  const levels = [
+    { label: '', color: 'transparent', pct: '0%' },
+    { label: 'Weak',     color: '#ef4444', pct: '25%'  },
+    { label: 'Fair',     color: '#f97316', pct: '50%'  },
+    { label: 'Good',     color: '#eab308', pct: '75%'  },
+    { label: 'Strong ✓', color: '#22c55e', pct: '100%' }
+  ];
+  return levels[score] || levels[0];
+}
+
+// ─────────────────────────────────────────────────────
+// OTP BOX UX (auto-advance + backspace)
+// ─────────────────────────────────────────────────────
+function setupOTPBoxes() {
+  const boxes = document.querySelectorAll('.otp-box');
+  boxes.forEach((box, i) => {
+    box.value = '';
+    box.addEventListener('input', () => {
+      box.value = box.value.replace(/\D/g, '');
+      if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+    });
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !box.value && i > 0) boxes[i - 1].focus();
+    });
+    box.addEventListener('paste', e => {
+      e.preventDefault();
+      const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      pasted.split('').forEach((ch, j) => { if (boxes[j]) boxes[j].value = ch; });
+      if (boxes[pasted.length - 1]) boxes[pasted.length - 1].focus();
+    });
+  });
+}
+
+function getOTPValue() {
+  return Array.from(document.querySelectorAll('.otp-box')).map(b => b.value).join('');
+}
+
+// ─────────────────────────────────────────────────────
+// OTP RESEND TIMER
+// ─────────────────────────────────────────────────────
+function startResendTimer() {
+  let secs = 60;
+  const timerEl = document.getElementById('resend-timer');
+  const btn     = document.getElementById('resend-btn');
+  btn.disabled  = true;
+  if (state._resendTimer) clearInterval(state._resendTimer);
+  state._resendTimer = setInterval(() => {
+    timerEl.textContent = `Resend in ${secs}s`;
+    secs--;
+    if (secs < 0) {
+      clearInterval(state._resendTimer);
+      timerEl.textContent = '';
+      btn.disabled = false;
+    }
+  }, 1000);
+}
+
+async function resendOTP() {
+  try {
+    await fetch(`${API_BASE}/auth/resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: state._otpEmail, purpose: state._otpPurpose })
+    });
+    showToast('A new code has been sent to your email.', 'success');
+    startResendTimer();
+    setupOTPBoxes();
+  } catch { showToast('Failed to resend code. Try again.', 'error'); }
+}
+
+function goBackFromOTP() {
+  if (state._otpPurpose === 'signup')     showPanel('signup');
+  else if (state._otpPurpose === 'reset') showPanel('forgot');
+  else showPanel('login');
+}
+
+// ─────────────────────────────────────────────────────
+// TOAST NOTIFICATIONS
+// ─────────────────────────────────────────────────────
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: 'check-circle', error: 'alert-octagon', warning: 'alert-triangle', info: 'info' };
+  toast.innerHTML = `<i data-lucide="${icons[type] || 'check-circle'}"></i><div style="flex-grow:1;">${message}</div>`;
+  container.appendChild(toast);
+  lucide.createIcons();
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.3s ease forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 4500);
+}
+
+// ─────────────────────────────────────────────────────
+// SHOW APP LAYOUT (after login)
+// ─────────────────────────────────────────────────────
 function showAppLayout() {
-  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display  = 'none';
   document.getElementById('app-container').style.display = 'grid';
-  
-  // Render user profile info
-  const nameEl = document.getElementById('user-display-name');
-  const roleEl = document.getElementById('user-role-badge');
-  const initialsEl = document.getElementById('user-initials');
-  
-  nameEl.textContent = state.currentUser.name;
-  
-  // Top nav indicator
-  document.getElementById('top-user-name').textContent = state.currentUser.name;
-  
-  // Set role class and badge text
-  roleEl.className = 'role-badge';
+
+  const u = state.currentUser;
+  document.getElementById('user-display-name').textContent = u.name;
+  document.getElementById('top-user-name').textContent     = u.name;
+
+  const roleEl   = document.getElementById('user-role-badge');
   const topBadge = document.getElementById('top-user-badge');
+  roleEl.className  = 'role-badge';
   topBadge.className = 'role-pill';
 
-  if (state.currentUser.role === 'fleet_manager') {
-    roleEl.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-    roleEl.classList.add('manager');
-    topBadge.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-  } else if (state.currentUser.role === 'driver') {
-    if (state.currentUser.email === 'driver@transitops.com') {
-      roleEl.textContent = 'Dispatcher';
-      roleEl.classList.add('dispatcher');
-      topBadge.textContent = 'Dispatcher';
-    } else {
-      roleEl.textContent = 'Driver';
-      roleEl.classList.add('driver');
-      topBadge.textContent = 'Driver';
-    }
-  } else if (state.currentUser.role === 'safety_officer') {
-    roleEl.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-    roleEl.classList.add('safety');
-    topBadge.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-  } else if (state.currentUser.role === 'financial_analyst') {
-    roleEl.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-    roleEl.classList.add('finance');
-    topBadge.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-  }
-  
-  // Initials
-  const initials = state.currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-  initialsEl.textContent = initials;
-  
-  // Apply role permissions
+  const roleClass = { fleet_manager:'manager', driver:'dispatcher', safety_officer:'safety', financial_analyst:'finance' };
+  roleEl.textContent   = ROLE_DISPLAY_LABELS[u.role];
+  topBadge.textContent = ROLE_DISPLAY_LABELS[u.role];
+  roleEl.classList.add(roleClass[u.role] || '');
+
+  const initials = u.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  document.getElementById('user-initials').textContent = initials;
+
   applyRolePermissions();
 }
 
 function getLandingViewForRole(role) {
-  if (role === 'fleet_manager') return 'vehicles';
-  if (role === 'driver') {
-    if (state.currentUser && state.currentUser.email === 'driver@transitops.com') {
-      return 'dashboard';
-    }
-    return 'driver_portal';
-  }
-  if (role === 'safety_officer') return 'drivers';
-  if (role === 'financial_analyst') return 'expenses';
+  if (role === 'fleet_manager')    return 'vehicles';
+  if (role === 'driver')           return 'dashboard';
+  if (role === 'safety_officer')   return 'drivers';
+  if (role === 'financial_analyst')return 'expenses';
   return 'settings';
 }
 
 function applyRolePermissions() {
   const role = state.currentUser.role;
-  
-  // Navigation tabs elements mapping
   const tabs = {
-    dashboard: document.getElementById('nav-dashboard'),
-    vehicles: document.getElementById('nav-vehicles'),
-    drivers: document.getElementById('nav-drivers'),
-    trips: document.getElementById('nav-trips'),
+    dashboard:   document.getElementById('nav-dashboard'),
+    vehicles:    document.getElementById('nav-vehicles'),
+    drivers:     document.getElementById('nav-drivers'),
+    trips:       document.getElementById('nav-trips'),
     maintenance: document.getElementById('nav-maintenance'),
-    expenses: document.getElementById('nav-expenses'),
-    reports: document.getElementById('nav-reports'),
-    settings: document.getElementById('nav-settings'),
-    driver_portal: document.getElementById('nav-driver-portal')
+    expenses:    document.getElementById('nav-expenses'),
+    reports:     document.getElementById('nav-reports'),
+    settings:    document.getElementById('nav-settings')
   };
+  for (const key in tabs) if (tabs[key]) tabs[key].style.display = 'none';
 
-  // Hide all navigation links by default
-  for (const key in tabs) {
-    if (tabs[key]) tabs[key].style.display = 'none';
-  }
-
-  // Show only specific links based on Mockup rules
   if (role === 'fleet_manager') {
-    if (tabs.vehicles) tabs.vehicles.style.display = 'flex';
+    if (tabs.vehicles)    tabs.vehicles.style.display    = 'flex';
     if (tabs.maintenance) tabs.maintenance.style.display = 'flex';
   } else if (role === 'driver') {
-    if (state.currentUser && state.currentUser.email === 'driver@transitops.com') {
-      if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
-      if (tabs.trips) tabs.trips.style.display = 'flex';
-    } else {
-      if (tabs.driver_portal) tabs.driver_portal.style.display = 'flex';
-    }
+    if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
+    if (tabs.trips)     tabs.trips.style.display     = 'flex';
   } else if (role === 'safety_officer') {
     if (tabs.drivers) tabs.drivers.style.display = 'flex';
   } else if (role === 'financial_analyst') {
     if (tabs.expenses) tabs.expenses.style.display = 'flex';
-    if (tabs.reports) tabs.reports.style.display = 'flex';
+    if (tabs.reports)  tabs.reports.style.display  = 'flex';
   }
-  
-  // All roles have access to settings view
   if (tabs.settings) tabs.settings.style.display = 'flex';
 
-  // Apply button level role scopes
-  const managerOnlyButtons = document.querySelectorAll('.action-restricted-manager');
-  managerOnlyButtons.forEach(btn => {
-    btn.style.display = (role === 'fleet_manager') ? 'inline-flex' : 'none';
-  });
-
-  const managerSafetyButtons = document.querySelectorAll('.action-restricted-manager-safety');
-  managerSafetyButtons.forEach(btn => {
-    btn.style.display = (role === 'fleet_manager' || role === 'safety_officer') ? 'inline-flex' : 'none';
-  });
-
-  const managerDriverButtons = document.querySelectorAll('.action-restricted-manager-driver');
-  managerDriverButtons.forEach(btn => {
-    btn.style.display = (role === 'fleet_manager' || role === 'driver') ? 'inline-flex' : 'none';
-  });
-
-  const managerFinanceButtons = document.querySelectorAll('.action-restricted-manager-finance');
-  managerFinanceButtons.forEach(btn => {
-    btn.style.display = (role === 'fleet_manager' || role === 'financial_analyst') ? 'inline-flex' : 'none';
-  });
+  document.querySelectorAll('.action-restricted-manager').forEach(b =>
+    b.style.display = role === 'fleet_manager' ? 'inline-flex' : 'none');
+  document.querySelectorAll('.action-restricted-manager-safety').forEach(b =>
+    b.style.display = (role === 'fleet_manager' || role === 'safety_officer') ? 'inline-flex' : 'none');
+  document.querySelectorAll('.action-restricted-manager-driver').forEach(b =>
+    b.style.display = (role === 'fleet_manager' || role === 'driver') ? 'inline-flex' : 'none');
+  document.querySelectorAll('.action-restricted-manager-finance').forEach(b =>
+    b.style.display = (role === 'fleet_manager' || role === 'financial_analyst') ? 'inline-flex' : 'none');
 }
 
-// ----------------------------------------------------
-// TOAST NOTIFICATIONS SYSTEM
-// ----------------------------------------------------
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-
-  let iconName = 'check-circle';
-  if (type === 'error') iconName = 'alert-octagon';
-  else if (type === 'warning') iconName = 'alert-triangle';
-
-  toast.innerHTML = `
-    <i data-lucide="${iconName}"></i>
-    <div style="flex-grow: 1;">${message}</div>
-  `;
-  container.appendChild(toast);
-  lucide.createIcons();
-
-  setTimeout(() => {
-    toast.style.animation = 'toastOut 0.3s ease forwards';
-    setTimeout(() => {
-      toast.remove();
-    }, 300);
-  }, 4500);
-}
-
-// ----------------------------------------------------
+// ─────────────────────────────────────────────────────
 // EVENT LISTENERS SETUP
-// ----------------------------------------------------
+// ─────────────────────────────────────────────────────
 function setupEventListeners() {
-  // Login Form Submission
+
+  // ── LOGIN FORM ────────────────────────────────────
   document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
+    const email    = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
-    const selectedRole = document.getElementById('login-role').value;
-    
-    // Check lockout attempts count
-    let failedAttempts = JSON.parse(localStorage.getItem('failed_logins') || '{}');
-    if (failedAttempts[email] >= 5) {
-      document.getElementById('login-error-card').style.display = 'block';
-      document.getElementById('login-error-msg').textContent = 'Account locked after 5 failed attempts.';
-      showToast('Login blocked: This account is currently locked.', 'error');
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to authenticate');
-      
-      // Clear failed count on success
-      failedAttempts[email] = 0;
-      localStorage.setItem('failed_logins', JSON.stringify(failedAttempts));
-      document.getElementById('login-error-card').style.display = 'none';
-
-      // Override role with the selected dropdown value for demonstration flexibility
-      data.role = selectedRole;
-
-      state.currentUser = data;
-      localStorage.setItem('transitops_user', JSON.stringify(data));
-      
-      showAppLayout();
-      const landing = getLandingViewForRole(data.role);
-      navigateTo(landing);
-      showToast(`Logged in as ${data.name}!`, 'success');
-    } catch (err) {
-      // Increment failed count
-      failedAttempts[email] = (failedAttempts[email] || 0) + 1;
-      localStorage.setItem('failed_logins', JSON.stringify(failedAttempts));
-
-      const remaining = 5 - failedAttempts[email];
-      const errorCard = document.getElementById('login-error-card');
-      errorCard.style.display = 'block';
-
-      if (failedAttempts[email] >= 5) {
-        document.getElementById('login-error-msg').textContent = 'Account locked after 5 failed attempts.';
-        showToast('Login Error: Account locked due to too many failed attempts.', 'error');
-      } else {
-        document.getElementById('login-error-msg').textContent = `Invalid credentials. Account will lock after ${remaining} more attempt(s).`;
-        showToast(`Login Failed: ${err.message}`, 'error');
+      const data = await res.json();
+      if (res.status === 423 || data.frozen) {
+        // Account frozen
+        document.getElementById('unfreeze-email').value = email;
+        showPanel('frozen');
+        return;
       }
+      if (res.status === 403 && data.unverified) {
+        // Not yet verified — go to OTP panel
+        state._otpEmail   = data.email;
+        state._otpPurpose = 'signup';
+        document.getElementById('otp-subtitle').textContent = `We sent a verification code to ${data.email}`;
+        showPanel('otp'); setupOTPBoxes(); startResendTimer();
+        return;
+      }
+      if (!res.ok) { showAuthError(data.error || 'Login failed.'); return; }
+
+      saveSession(data.user, data.accessToken, data.refreshToken);
+      document.getElementById('login-error-card').style.display = 'none';
+      showAppLayout();
+      navigateTo(getLandingViewForRole(data.user.role));
+      showToast(`Welcome back, ${data.user.name}! `, 'success');
+    } catch (err) {
+      showAuthError(err.message || 'Network error. Is the server running?');
     }
   });
-  
-  // Quick Login Demo Buttons
-  const quickLoginButtons = document.querySelectorAll('.quick-login-btn');
-  quickLoginButtons.forEach(btn => {
+
+  // ── QUICK LOGIN BUTTONS ───────────────────────────
+  document.querySelectorAll('.quick-login-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const email = btn.getAttribute('data-email');
-      const role = btn.getAttribute('data-role');
-      document.getElementById('login-email').value = email;
-      document.getElementById('login-password').value = 'password123';
-      document.getElementById('login-role').value = role;
+      document.getElementById('login-email').value    = btn.getAttribute('data-email');
+      document.getElementById('login-password').value = 'Password@123';
       document.getElementById('login-form').dispatchEvent(new Event('submit'));
     });
   });
-  
-  // Logout Button
-  document.getElementById('logout-btn').addEventListener('click', () => {
-    showToast('Signed out successfully.', 'info');
-    localStorage.removeItem('transitops_user');
-    state.currentUser = null;
+
+  // ── SIGNUP FORM ───────────────────────────────────
+  document.getElementById('signup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name     = document.getElementById('signup-name').value.trim();
+    const email    = document.getElementById('signup-email').value.trim();
+    const phone    = document.getElementById('signup-phone').value.trim();
+    const role     = document.getElementById('signup-role').value;
+    const password = document.getElementById('signup-password').value;
+    const confirm  = document.getElementById('signup-confirm').value;
+
+    if (password !== confirm) { showAuthError('Passwords do not match.'); return; }
+    const strength = checkPasswordStrength(password);
+    if (strength.pct !== '100%') { showAuthError('Please choose a stronger password.'); return; }
+
+    try {
+      const res  = await fetch(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, phone, role })
+      });
+      const data = await res.json();
+      if (!res.ok) { showAuthError(data.error || 'Signup failed.'); return; }
+
+      state._otpEmail   = email;
+      state._otpPurpose = 'signup';
+      document.getElementById('otp-subtitle').textContent = `We sent a verification code to ${email}`;
+      showPanel('otp'); setupOTPBoxes(); startResendTimer();
+      showToast('Account created! Check your email for the code.', 'success');
+    } catch (err) { showAuthError(err.message || 'Network error.'); }
+  });
+
+  // ── SIGNUP PASSWORD STRENGTH METER ────────────────
+  document.getElementById('signup-password').addEventListener('input', (e) => {
+    const s = checkPasswordStrength(e.target.value);
+    document.getElementById('pw-strength-fill').style.width      = s.pct;
+    document.getElementById('pw-strength-fill').style.background = s.color;
+    const lbl = document.getElementById('pw-strength-label');
+    lbl.textContent  = s.label;
+    lbl.style.color  = s.color;
+  });
+
+  // ── OTP FORM ──────────────────────────────────────
+  document.getElementById('otp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const otp = getOTPValue();
+    if (otp.length !== 6) { showAuthError('Please enter all 6 digits.'); return; }
+
+    try {
+      let endpoint = '';
+      if (state._otpPurpose === 'signup')   endpoint = '/auth/verify-otp';
+      else if (state._otpPurpose === 'reset')   { showPanel('reset'); return; }
+      else if (state._otpPurpose === 'unfreeze'){ showPanel('reset'); return; }
+
+      const res  = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: state._otpEmail, otp })
+      });
+      const data = await res.json();
+      if (!res.ok) { showAuthError(data.error || 'Invalid code.'); return; }
+
+      if (state._otpPurpose === 'signup') {
+        showToast('Email verified! You can now log in.', 'success');
+        showPanel('login'); switchAuthTab('login');
+      }
+    } catch (err) { showAuthError(err.message); }
+  });
+
+  // For reset/unfreeze, OTP verify happens inline before showing reset panel
+  // Override the otp submit for these purposes:
+  document.getElementById('otp-form').addEventListener('submit', async (e) => {
+    // This is the second listener — only handles reset/unfreeze
+    if (state._otpPurpose !== 'reset' && state._otpPurpose !== 'unfreeze') return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const otp = getOTPValue();
+    if (otp.length !== 6) { showAuthError('Enter all 6 digits.'); return; }
+
+    const endpoint = state._otpPurpose === 'reset'
+      ? '/auth/reset-password'
+      : '/auth/unfreeze';
+
+    // Store OTP for use in the reset-form
+    state._pendingOtp = otp;
+    showPanel('reset');
+  }, true);
+
+  // ── FORGOT PASSWORD FORM ──────────────────────────
+  document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('forgot-email').value.trim();
+    try {
+      await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      state._otpEmail   = email;
+      state._otpPurpose = 'reset';
+      document.getElementById('otp-subtitle').textContent = `Enter the code sent to ${email}`;
+      showPanel('otp'); setupOTPBoxes(); startResendTimer();
+      showToast('Reset code sent if that email exists.', 'success');
+    } catch (err) { showAuthError(err.message); }
+  });
+
+  // ── RESET PASSWORD FORM ───────────────────────────
+  document.getElementById('reset-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newPassword = document.getElementById('reset-password').value;
+    const confirm     = document.getElementById('reset-confirm').value;
+    if (newPassword !== confirm) { showAuthError('Passwords do not match.'); return; }
+
+    const endpoint = state._otpPurpose === 'unfreeze'
+      ? '/auth/unfreeze'
+      : '/auth/reset-password';
+
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: state._otpEmail, otp: state._pendingOtp, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { showAuthError(data.error); return; }
+      showToast(data.message || 'Password updated! You can now log in.', 'success');
+      showPanel('login'); switchAuthTab('login');
+    } catch (err) { showAuthError(err.message); }
+  });
+
+  // ── UNFREEZE FORM ─────────────────────────────────
+  document.getElementById('unfreeze-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('unfreeze-email').value.trim();
+    try {
+      await fetch(`${API_BASE}/auth/request-unfreeze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      state._otpEmail   = email;
+      state._otpPurpose = 'unfreeze';
+      document.getElementById('otp-subtitle').textContent = `Enter the unlock code sent to ${email}`;
+      showPanel('otp'); setupOTPBoxes(); startResendTimer();
+      showToast('Unlock code sent! Check your email.', 'success');
+    } catch (err) { showAuthError(err.message); }
+  });
+
+  // ── LOGOUT ────────────────────────────────────────
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: state.refreshToken })
+      });
+    } catch (_) {}
+    clearSession();
+    showToast('Signed out successfully.', 'success');
     showLoginLayout();
   });
   
@@ -394,16 +664,12 @@ function setupEventListeners() {
 
   document.getElementById('btn-log-fuel').addEventListener('click', () => {
     setupExpenseFormDropdowns('fuel-vehicle');
-    document.getElementById('fuel-vehicle').disabled = false;
-    document.getElementById('fuel-trip-id').value = '';
     document.getElementById('fuel-date').value = new Date().toISOString().split('T')[0];
     openModal('modal-fuel');
   });
 
   document.getElementById('btn-log-expense').addEventListener('click', () => {
     setupExpenseFormDropdowns('expense-vehicle');
-    document.getElementById('expense-vehicle').disabled = false;
-    document.getElementById('expense-trip-id').value = '';
     document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
     openModal('modal-expense');
   });
@@ -471,19 +737,6 @@ function setupEventListeners() {
 
   document.getElementById('btn-export-csv').addEventListener('click', exportReportsCSV);
   document.getElementById('btn-export-pdf').addEventListener('click', exportReportsPDF);
-
-  // Driver Portal Actions
-  document.getElementById('driver-portal-log-fuel').addEventListener('click', () => {
-    const activeTrip = getActiveTripForCurrentDriver();
-    const vehicleId = activeTrip ? activeTrip.vehicle_id : '';
-    openDriverLogFuel(vehicleId, activeTrip ? activeTrip.id : null);
-  });
-
-  document.getElementById('driver-portal-log-expense').addEventListener('click', () => {
-    const activeTrip = getActiveTripForCurrentDriver();
-    const vehicleId = activeTrip ? activeTrip.vehicle_id : '';
-    openDriverLogExpense(vehicleId, activeTrip ? activeTrip.id : null);
-  });
 }
 
 // Helper to parse weights
@@ -658,44 +911,19 @@ async function navigateTo(view) {
       case 'reports':
         await loadReportsData();
         break;
-      case 'driver_portal':
-        await loadDriverPortalData();
-        break;
     }
   } catch (err) {
     console.error(`Error loading data for view ${view}:`, err);
   }
 }
 
-// Helper to query API
+// Legacy apiCall — delegates to JWT-based apiJSONCall defined at top of file
+// (kept as no-op alias to avoid breaking any direct call sites)
 async function apiCall(endpoint, options = {}) {
-  const headers = options.headers || {};
-  if (state.currentUser) {
-    headers['x-user-role'] = state.currentUser.role;
-    headers['x-user-email'] = state.currentUser.email;
-  }
-  
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: { ...headers }
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Server request failed');
-  }
-  return data;
-}
-
-async function apiJSONCall(endpoint, method = 'GET', body = null) {
-  const options = {
-    method,
-    headers: { 'Content-Type': 'application/json' }
-  };
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
-  return apiCall(endpoint, options);
+  const method = options.method || 'GET';
+  let body = null;
+  if (options.body) { try { body = JSON.parse(options.body); } catch(_) {} }
+  return apiJSONCall(endpoint, method, body);
 }
 
 function openModal(id) {
@@ -914,22 +1142,10 @@ function renderVehiclesTable() {
   }
 
   displayList.forEach(v => {
-    const relativeOdo = v.odometer % 10000;
-    let healthBadge = '';
-    if (v.status === 'In Shop') {
-      healthBadge = '<span class="badge badge-sm retired" style="margin-left: 6px; font-size:10px; padding:2px 6px;">Servicing</span>';
-    } else if (relativeOdo > 9000) {
-      healthBadge = '<span class="badge badge-sm cancelled" style="margin-left: 6px; font-size:10px; padding:2px 6px;" title="Overdue for 10k service">⚠️ Service Overdue</span>';
-    } else if (relativeOdo > 7500) {
-      healthBadge = '<span class="badge badge-sm inshop" style="margin-left: 6px; font-size:10px; padding:2px 6px;" title="Maintenance check due soon">🔧 Service Due</span>';
-    } else {
-      healthBadge = '<span class="badge badge-sm available" style="margin-left: 6px; font-size:10px; padding:2px 6px;">🟢 Healthy</span>';
-    }
-
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${v.registration_number}</strong></td>
-      <td>${v.name} ${healthBadge}</td>
+      <td>${v.name}</td>
       <td>${v.type}</td>
       <td>${v.max_load_capacity}</td>
       <td>${v.odometer.toLocaleString()} km</td>
@@ -961,35 +1177,7 @@ async function loadDriversData() {
   renderDriversTable();
 }
 
-function renderDriversLeaderboard() {
-  const container = document.getElementById('leaderboard-cards-container');
-  if (!container) return;
-
-  // Sort drivers by safety score descending, take top 3
-  const topDrivers = [...state.drivers]
-    .sort((a, b) => b.safety_score - a.safety_score)
-    .slice(0, 3);
-
-  container.innerHTML = '';
-  const medals = ['🥇', '🥈', '🥉'];
-
-  topDrivers.forEach((d, idx) => {
-    const card = document.createElement('div');
-    card.className = 'leaderboard-item-card';
-    card.innerHTML = `
-      <div class="leaderboard-rank">${medals[idx] || (idx + 1)}</div>
-      <div class="leaderboard-driver-info">
-        <h4 style="margin:0; font-size:14px;">${d.name}</h4>
-        <small style="color:var(--text-muted); font-size:11px;">Category: ${d.license_category}</small>
-      </div>
-      <div class="leaderboard-score" style="font-weight:800; color:var(--color-available);">${d.safety_score} / 100</div>
-    `;
-    container.appendChild(card);
-  });
-}
-
 function renderDriversTable() {
-  renderDriversLeaderboard();
   const query = document.getElementById('drv-search').value.toLowerCase().trim();
   const statusFilter = document.getElementById('drv-filter-status').value;
 
@@ -1663,11 +1851,7 @@ async function handleCompleteTrip(e) {
     await apiJSONCall(`/trips/${id}/complete`, 'PUT', payload);
     showToast('Trip completed. Fuel addition logged.', 'success');
     closeAllModals();
-    if (state.activeView === 'driver_portal') {
-      await loadDriverPortalData();
-    } else {
-      await loadTripsData();
-    }
+    await loadTripsData();
   } catch (err) {
     showToast(`Failed to complete: ${err.message}`, 'error');
   }
@@ -1735,10 +1919,8 @@ async function handleCloseMaintenance(e) {
 // 6. Fuel & Expense Logging
 async function handleLogFuel(e) {
   e.preventDefault();
-  const tripIdEl = document.getElementById('fuel-trip-id');
   const payload = {
     vehicle_id: document.getElementById('fuel-vehicle').value,
-    trip_id: tripIdEl && tripIdEl.value ? parseInt(tripIdEl.value) : null,
     liters: parseFloat(document.getElementById('fuel-liters').value),
     cost: parseFloat(document.getElementById('fuel-cost').value),
     date: document.getElementById('fuel-date').value
@@ -1749,11 +1931,7 @@ async function handleLogFuel(e) {
     showToast(`Fuel receipt logged successfully.`, 'success');
     closeAllModals();
     document.getElementById('form-fuel').reset();
-    if (state.currentUser && state.currentUser.role === 'driver') {
-      await navigateTo('driver_portal');
-    } else {
-      await navigateTo('expenses');
-    }
+    await navigateTo('expenses');
   } catch (err) {
     showToast(`Failed to log fuel: ${err.message}`, 'error');
   }
@@ -1774,11 +1952,7 @@ async function handleLogExpense(e) {
     showToast(`Operational expense details saved.`, 'success');
     closeAllModals();
     document.getElementById('form-expense').reset();
-    if (state.currentUser && state.currentUser.role === 'driver') {
-      await navigateTo('driver_portal');
-    } else {
-      await navigateTo('expenses');
-    }
+    await navigateTo('expenses');
   } catch (err) {
     showToast(`Failed to log expense: ${err.message}`, 'error');
   }
@@ -1987,325 +2161,3 @@ async function deleteDriver(id) {
     showToast(`Error deleting driver: ${err.message}`, 'error');
   }
 }
-
-// ----------------------------------------------------
-// DRIVER PORTAL FUNCTIONS
-// ----------------------------------------------------
-async function loadDriverPortalData() {
-  if (!state.currentUser || state.currentUser.role !== 'driver') return;
-  
-  try {
-    state.drivers = await apiJSONCall('/drivers');
-    state.trips = await apiJSONCall('/trips');
-    state.vehicles = await apiJSONCall('/vehicles');
-
-    const cleanUserName = state.currentUser.name.replace(/\s*\(Driver\)\s*/i, '').trim().toLowerCase();
-    const myDriver = state.drivers.find(d => d.name.toLowerCase() === cleanUserName);
-
-    if (!myDriver) {
-      document.getElementById('driver-portal-welcome').textContent = `Welcome, ${state.currentUser.name}!`;
-      document.getElementById('driver-portal-active-trip-container').innerHTML = `
-        <div class="alert alert-warning" style="margin: 0; background: rgba(245,158,11,0.08); border: 1px dashed var(--color-inshop); padding: 12px; border-radius: 8px; color: var(--color-inshop);">
-          Driver profile matching "${state.currentUser.name}" not found in roster. Please contact the administrator.
-        </div>
-      `;
-      return;
-    }
-
-    document.getElementById('driver-portal-welcome').textContent = `Welcome back, ${myDriver.name}!`;
-    document.getElementById('driver-my-license-category').textContent = myDriver.license_category || '-';
-    document.getElementById('driver-my-license-expiry').textContent = myDriver.license_expiry_date || '-';
-    document.getElementById('driver-my-contact').textContent = myDriver.contact_number || '-';
-    
-    const statusEl = document.getElementById('driver-my-status');
-    statusEl.textContent = myDriver.status;
-    statusEl.className = `badge ${myDriver.status.toLowerCase().replace(/\s+/g, '')}`;
-
-    const score = myDriver.safety_score || 0;
-    document.getElementById('driver-safety-percentage').textContent = `${score}%`;
-    
-    const circle = document.getElementById('driver-safety-circle');
-    if (circle) {
-      const offset = 314.16 - (score / 100) * 314.16;
-      circle.style.strokeDashoffset = offset;
-      if (score >= 90) {
-        circle.style.stroke = 'var(--color-available)';
-      } else if (score >= 70) {
-        circle.style.stroke = 'var(--color-inshop)';
-      } else {
-        circle.style.stroke = 'var(--color-retired)';
-      }
-    }
-
-    const feedbackEl = document.getElementById('driver-safety-feedback');
-    if (feedbackEl) {
-      if (score >= 95) feedbackEl.textContent = 'Exceptional driving! Keep up the great safety standards.';
-      else if (score >= 85) feedbackEl.textContent = 'Good safety record. Stay alert on the road.';
-      else if (score >= 70) feedbackEl.textContent = 'Average safety rating. Minor improvements recommended.';
-      else feedbackEl.textContent = 'Caution: Please review driving safety guidelines.';
-    }
-
-    const myTrips = state.trips.filter(t => t.driver_id === myDriver.id);
-    const activeTrip = myTrips.find(t => t.status === 'Active' || t.status === 'Dispatched' || t.status === 'Draft');
-    
-    const activeTripContainer = document.getElementById('driver-portal-active-trip-container');
-    const vehicleModelEl = document.getElementById('driver-vehicle-model');
-    const vehicleRegEl = document.getElementById('driver-vehicle-reg');
-    const vehicleTypeEl = document.getElementById('driver-vehicle-type');
-    const vehicleOdometerEl = document.getElementById('driver-vehicle-odometer');
-
-    if (activeTrip) {
-      const assignedVehicle = state.vehicles.find(v => v.registration_number === activeTrip.vehicle_id);
-
-      if (assignedVehicle) {
-        vehicleModelEl.textContent = assignedVehicle.name || assignedVehicle.model || '-';
-        vehicleRegEl.textContent = assignedVehicle.registration_number || '-';
-        vehicleTypeEl.textContent = assignedVehicle.type || '-';
-        vehicleOdometerEl.textContent = `${(assignedVehicle.odometer || 0).toLocaleString()} km`;
-      } else {
-        vehicleModelEl.textContent = '-';
-        vehicleRegEl.textContent = activeTrip.vehicle_id || '-';
-        vehicleTypeEl.textContent = '-';
-        vehicleOdometerEl.textContent = '-';
-      }
-
-      const odo = assignedVehicle ? assignedVehicle.odometer : 0;
-      activeTripContainer.innerHTML = `
-        <div class="active-trip-card" style="display: flex; flex-direction: column; gap: 15px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 18px; font-weight: 600; color: var(--text-main);">Trip #${activeTrip.id}</span>
-            <span class="badge ${activeTrip.status.toLowerCase()}">${activeTrip.status}</span>
-          </div>
-          
-          <div class="route-visualizer" style="display: flex; align-items: center; justify-content: space-between; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; margin: 5px 0;">
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <span style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Origin</span>
-              <strong style="color: var(--text-main); font-size: 15px;">${activeTrip.source}</strong>
-            </div>
-            <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; margin: 0 15px; min-width: 60px;">
-              <div style="height: 1px; background: var(--border-color); width: 100%; position: absolute; top: 50%; transform: translateY(-50%); z-index: 1;"></div>
-              <div style="z-index: 2; background: var(--bg-sidebar); padding: 0 8px; color: var(--color-ontrip);">
-                <i data-lucide="navigation" style="transform: rotate(90deg); width: 16px; height: 16px; display: inline-block;"></i>
-              </div>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 4px; text-align: right;">
-              <span style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Destination</span>
-              <strong style="color: var(--text-main); font-size: 15px;">${activeTrip.destination}</strong>
-            </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; text-align: center;">
-              <span style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 2px;">Cargo Load</span>
-              <strong style="font-size: 14px; color: var(--text-main);">${activeTrip.cargo_weight} kg</strong>
-            </div>
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; text-align: center;">
-              <span style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 2px;">Est. Distance</span>
-              <strong style="font-size: 14px; color: var(--text-main);">${activeTrip.planned_distance} km</strong>
-            </div>
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; text-align: center;">
-              <span style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 2px;">Pay/Revenue</span>
-              <strong style="font-size: 14px; color: var(--color-available);">$${activeTrip.revenue}</strong>
-            </div>
-          </div>
-
-          <div style="display: flex; gap: 10px; margin-top: 10px;">
-            ${activeTrip.status === 'Draft' ? `
-              <button class="btn btn-primary" onclick="driverPortalDispatch(${activeTrip.id})" style="flex: 1;">
-                <i data-lucide="play"></i><span>Start Trip</span>
-              </button>
-            ` : ''}
-            ${activeTrip.status === 'Dispatched' || activeTrip.status === 'Active' ? `
-              <button class="btn btn-primary" onclick="driverPortalComplete(${activeTrip.id}, ${odo})" style="flex: 1; background: var(--color-available); border-color: var(--color-available);">
-                <i data-lucide="check-circle"></i><span>Complete Trip</span>
-              </button>
-            ` : ''}
-            <button class="btn btn-outline" onclick="openDriverLogFuel('${activeTrip.vehicle_id}', ${activeTrip.id})" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 12px; font-size: 13px;">
-              <i data-lucide="droplet"></i><span>Fuel</span>
-            </button>
-            <button class="btn btn-outline" onclick="openDriverLogExpense('${activeTrip.vehicle_id}', ${activeTrip.id})" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 12px; font-size: 13px;">
-              <i data-lucide="receipt"></i><span>Expense</span>
-            </button>
-          </div>
-        </div>
-      `;
-    } else {
-      vehicleModelEl.textContent = '-';
-      vehicleRegEl.textContent = '-';
-      vehicleTypeEl.textContent = '-';
-      vehicleOdometerEl.textContent = '-';
-      
-      activeTripContainer.innerHTML = `
-        <div style="text-align: center; padding: 40px 20px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 15px;">
-          <div style="width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
-            <i data-lucide="coffee" style="width: 24px; height: 24px;"></i>
-          </div>
-          <div>
-            <h4 style="margin: 0; font-size: 15px; color: var(--text-main);">No Active Assignments</h4>
-            <p style="margin: 4px 0 0 0; font-size: 12px;">You are currently off-duty with no active trips. Enjoy your rest!</p>
-          </div>
-        </div>
-      `;
-    }
-
-    const pastTrips = myTrips.filter(t => t.status === 'Completed' || t.status === 'Cancelled');
-    const pastTripsBody = document.getElementById('driver-portal-past-trips');
-    if (pastTrips.length > 0) {
-      pastTripsBody.innerHTML = pastTrips.map(t => `
-        <tr>
-          <td>#${t.id}</td>
-          <td>
-            <div style="display: flex; flex-direction: column;">
-              <strong>${t.source} &rarr; ${t.destination}</strong>
-              <span style="font-size: 11px; color: var(--text-muted);">${t.planned_distance} km</span>
-            </div>
-          </td>
-          <td>${t.vehicle_id}</td>
-          <td>${t.cargo_weight} kg</td>
-          <td><span class="badge ${t.status.toLowerCase()}">${t.status}</span></td>
-        </tr>
-      `).join('');
-    } else {
-      pastTripsBody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No past trips recorded.</td></tr>`;
-    }
-
-    // Load Fuel logs and Expenses for the logged in driver
-    state.fuelLogs = await apiJSONCall('/fuel');
-    state.expenses = await apiJSONCall('/expenses');
-
-    // Scoping check: Current active trip if any, else previous trip
-    let targetTripId = null;
-    let targetTripScopeLabel = 'No active or past trips found';
-
-    if (activeTrip) {
-      targetTripId = activeTrip.id;
-      targetTripScopeLabel = `Active Trip #${activeTrip.id} (${activeTrip.source} &rarr; ${activeTrip.destination})`;
-    } else if (pastTrips.length > 0) {
-      const previousTrip = pastTrips[0]; // pastTrips is reversed (newest first)
-      targetTripId = previousTrip.id;
-      targetTripScopeLabel = `Previous Trip #${previousTrip.id} (${previousTrip.source} &rarr; ${previousTrip.destination})`;
-    }
-
-    const scopeEl = document.getElementById('driver-logged-costs-trip-scope');
-    if (scopeEl) {
-      scopeEl.innerHTML = `Showing costs for: <strong>${targetTripScopeLabel}</strong>`;
-    }
-
-    const myFuelLogs = state.fuelLogs.filter(f => f.logged_by === state.currentUser.email && f.trip_id === targetTripId);
-    const myExpenses = state.expenses.filter(e => e.logged_by === state.currentUser.email && e.trip_id === targetTripId);
-
-    // Calculate total cost logged by this driver
-    const totalFuelCost = myFuelLogs.reduce((sum, f) => sum + f.cost, 0);
-    const totalExpenseCost = myExpenses.reduce((sum, e) => sum + e.cost, 0);
-    const totalDriverCost = totalFuelCost + totalExpenseCost;
-
-    const loggedSummaryEl = document.getElementById('driver-logged-costs-summary');
-    if (loggedSummaryEl) {
-      loggedSummaryEl.textContent = `Total: ₹${totalDriverCost.toLocaleString()}`;
-    }
-
-    // Render Fuel Logs Table
-    const fuelBody = document.getElementById('driver-portal-fuel-logs');
-    if (fuelBody) {
-      if (myFuelLogs.length > 0) {
-        fuelBody.innerHTML = myFuelLogs.map(f => `
-          <tr>
-            <td>${f.date}</td>
-            <td><strong>${f.vehicle_id}</strong></td>
-            <td>${f.liters} L</td>
-            <td>₹${f.cost.toLocaleString()}</td>
-            <td>${f.trip_id ? `#${f.trip_id}` : '-'}</td>
-          </tr>
-        `).join('');
-      } else {
-        fuelBody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No fuel logs recorded.</td></tr>`;
-      }
-    }
-
-    // Render Expenses Table
-    const expensesBody = document.getElementById('driver-portal-expenses');
-    if (expensesBody) {
-      if (myExpenses.length > 0) {
-        expensesBody.innerHTML = myExpenses.map(e => `
-          <tr>
-            <td>${e.date}</td>
-            <td><strong>${e.vehicle_id}</strong></td>
-            <td><span class="badge ${e.type.toLowerCase().replace(/\s+/g, '')}">${e.type}</span></td>
-            <td>₹${e.cost.toLocaleString()}</td>
-            <td>${e.description}</td>
-            <td>${e.trip_id ? `#${e.trip_id}` : '-'}</td>
-          </tr>
-        `).join('');
-      } else {
-        expensesBody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No other expenses recorded.</td></tr>`;
-      }
-    }
-
-    lucide.createIcons();
-  } catch (err) {
-    showToast(`Error loading driver portal: ${err.message}`, 'error');
-  }
-}
-
-function getActiveTripForCurrentDriver() {
-  if (!state.currentUser || !state.drivers || !state.trips) return null;
-  const cleanUserName = state.currentUser.name.replace(/\s*\(Driver\)\s*/i, '').trim().toLowerCase();
-  const myDriver = state.drivers.find(d => d.name.toLowerCase() === cleanUserName);
-  if (!myDriver) return null;
-  return state.trips.find(t => t.driver_id === myDriver.id && (t.status === 'Active' || t.status === 'Dispatched' || t.status === 'Draft'));
-}
-
-function openDriverLogFuel(vehicleId, tripId) {
-  setupExpenseFormDropdowns('fuel-vehicle');
-  const select = document.getElementById('fuel-vehicle');
-  select.value = vehicleId;
-  select.disabled = !!vehicleId;
-  document.getElementById('fuel-trip-id').value = tripId || '';
-  document.getElementById('fuel-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('fuel-liters').value = '';
-  document.getElementById('fuel-cost').value = '';
-  openModal('modal-fuel');
-}
-
-function openDriverLogExpense(vehicleId, tripId) {
-  setupExpenseFormDropdowns('expense-vehicle');
-  const select = document.getElementById('expense-vehicle');
-  select.value = vehicleId;
-  select.disabled = !!vehicleId;
-  document.getElementById('expense-trip-id').value = tripId || '';
-  document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('expense-cost').value = '';
-  document.getElementById('expense-desc').value = '';
-  openModal('modal-expense');
-}
-
-async function driverPortalDispatch(id) {
-  await dispatchTrip(id);
-  await loadDriverPortalData();
-}
-
-async function driverPortalComplete(id, odometerStart) {
-  openCompleteTripModal(id, odometerStart);
-}
-
-// Driver logged costs tab switcher
-window.switchDriverCostTab = function(tabName) {
-  const tabs = document.querySelectorAll('.driver-cost-tab-btn');
-  const contents = document.querySelectorAll('.driver-cost-tab-content');
-  
-  tabs.forEach(btn => {
-    if (btn.id === `btn-driver-cost-tab-${tabName}`) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
-  
-  contents.forEach(content => {
-    if (content.id === `driver-cost-content-${tabName}`) {
-      content.style.display = 'block';
-    } else {
-      content.style.display = 'none';
-    }
-  });
-};
