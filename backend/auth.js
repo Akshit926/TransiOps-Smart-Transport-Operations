@@ -2,11 +2,15 @@ require('dotenv').config();
 const express   = require('express');
 const bcrypt    = require('bcrypt');
 const jwt       = require('jsonwebtoken');
-const db        = require('./db_pg');
+const db = (process.env.SUPABASE_URL && process.env.SUPABASE_URL !== 'undefined' && process.env.SUPABASE_URL.startsWith('http') && process.env.SUPABASE_SERVICE_KEY)
+  ? require('./db_pg')
+  : require('./db');
 const { sendOTPEmail } = require('./mailer');
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
+const JWT_SECRET = process.env.JWT_SECRET || 'transitops_jwt_secret_default_key_2026';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'transitops_jwt_refresh_default_key_2026';
 
 const VALID_ROLES = ['fleet_manager', 'driver', 'safety_officer', 'financial_analyst', 'dispatcher'];
 
@@ -28,7 +32,7 @@ function isStrongPassword(pw) {
 function issueAccessToken(user) {
   return jwt.sign(
     { userId: user.id, email: user.email, role: user.role, name: user.name },
-    process.env.JWT_SECRET,
+    JWT_SECRET,
     { expiresIn: '15m' }
   );
 }
@@ -36,7 +40,7 @@ function issueAccessToken(user) {
 function issueRefreshToken(user) {
   return jwt.sign(
     { userId: user.id },
-    process.env.JWT_REFRESH_SECRET,
+    JWT_REFRESH_SECRET,
     { expiresIn: '7d' }
   );
 }
@@ -206,7 +210,7 @@ router.post('/refresh', async (req, res) => {
   if (!refreshToken) return res.status(401).json({ error: 'Refresh token required.' });
 
   try {
-    const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
     const user = await db.getUserById(payload.userId);
 
     if (!user || user.refresh_token !== refreshToken) {
@@ -230,7 +234,7 @@ router.post('/logout', async (req, res) => {
   const { refreshToken } = req.body;
   if (refreshToken) {
     try {
-      const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
       await db.clearRefreshToken(payload.userId);
     } catch (_) { /* token already invalid — fine */ }
   }

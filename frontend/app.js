@@ -2,7 +2,9 @@
 // TransitOps Frontend Core Logic — JWT Auth Edition
 // ==========================================================================
 
-const API_BASE = window.location.origin + '/api';
+const API_BASE = (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'))
+  ? (window.location.port === '5000' ? '/api' : 'http://localhost:5000/api')
+  : (window.location.origin.startsWith('file://') ? 'http://localhost:5000/api' : '/api');
 
 const ROLE_DISPLAY_LABELS = {
   fleet_manager: 'Fleet Manager',
@@ -713,6 +715,14 @@ function setupEventListeners() {
   
   document.getElementById('trip-cargo').addEventListener('input', (e) => {
     updateCargoCapacityHint();
+  });
+
+  document.getElementById('btn-cancel-trip-form').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('form-trip').reset();
+    document.getElementById('trip-vehicle-cap-hint').textContent = '';
+    document.getElementById('trip-overload-warning').style.display = 'none';
+    showToast('Trip dispatch form cleared.', 'info');
   });
 
   document.getElementById('btn-log-fuel').addEventListener('click', () => {

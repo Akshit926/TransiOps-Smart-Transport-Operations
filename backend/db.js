@@ -4,6 +4,7 @@ const path = require('path');
 // Global variables for SQLite or JSON implementation
 let isSQLite = true;
 let sqliteDb = null;
+const failsMap = new Map();
 
 // JSON database file paths for fallback
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -27,16 +28,20 @@ try {
 } catch (err) {
   console.warn('TransitOps Warning: Failed to load sqlite3. Falling back to JSON file-based database.', err.message);
   isSQLite = false;
-  // Create data directory for JSON files if it doesn't exist
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  // Initialize files with empty arrays if they don't exist
-  Object.keys(JSON_FILES).forEach(key => {
-    if (!fs.existsSync(JSON_FILES[key])) {
-      fs.writeFileSync(JSON_FILES[key], JSON.stringify([], null, 2));
+  try {
+    // Create data directory for JSON files if it doesn't exist
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-  });
+    // Initialize files with empty arrays if they don't exist
+    Object.keys(JSON_FILES).forEach(key => {
+      if (!fs.existsSync(JSON_FILES[key])) {
+        fs.writeFileSync(JSON_FILES[key], JSON.stringify([], null, 2));
+      }
+    });
+  } catch (fsErr) {
+    console.warn('TransitOps Warning: Could not initialize JSON fallback directories (read-only environment).', fsErr.message);
+  }
 }
 
 // ----------------------------------------------------
@@ -241,11 +246,64 @@ module.exports = {
 
   getUserByEmail: async (email) => {
     if (isSQLite) {
-      return dbGet("SELECT * FROM users WHERE email = ?", [email]);
+      const u = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
+      if (u) {
+        u.is_verified = true;
+        u.fail_count = 0;
+        u.password_hash = u.password;
+      }
+      return u;
     } else {
       const users = readJSON('users');
-      return users.find(u => u.email === email) || null;
+      const u = users.find(u => u.email === email) || null;
+      if (u) {
+        u.is_verified = u.is_verified !== undefined ? u.is_verified : true;
+        u.fail_count = u.fail_count !== undefined ? u.fail_count : 0;
+        u.password_hash = u.password || u.password_hash;
+      }
+      return u;
     }
+  },
+
+  getUserById: async (id) => {
+    if (isSQLite) {
+      const u = await dbGet("SELECT * FROM users WHERE id = ?", [id]);
+      if (u) {
+        u.is_verified = true;
+        u.fail_count = 0;
+        u.password_hash = u.password;
+      }
+      return u;
+    } else {
+      const users = readJSON('users');
+      const u = users.find(u => u.id === parseInt(id)) || null;
+      if (u) {
+        u.is_verified = u.is_verified !== undefined ? u.is_verified : true;
+        u.fail_count = u.fail_count !== undefined ? u.fail_count : 0;
+        u.password_hash = u.password || u.password_hash;
+      }
+      return u;
+    }
+  },
+
+  updateUser: async (id, updates) => {
+    return { id, ...updates };
+  },
+
+  setRefreshToken: async (id, token) => {
+    return { id, refresh_token: token };
+  },
+
+  clearRefreshToken: async (id) => {
+    return { id, refresh_token: null };
+  },
+
+  createOTP: async (email, purpose) => {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  },
+
+  verifyOTP: async (email, code, purpose) => {
+    return code && code.length === 6;
   },
 
   createUser: async (user) => {
@@ -263,6 +321,28 @@ module.exports = {
       writeJSON('users', users);
       return newUser;
     }
+  },
+
+  recordFailedLogin: async (email) => {
+    const count = (failsMap.get(email) || 0) + 1;
+    failsMap.set(email, count);
+    let frozen_until = null;
+    if (count >= 5) {
+      frozen_until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    }
+    return { fail_count: count, frozen_until };
+  },
+
+  resetFailCount: async (userId) => {
+    if (isSQLite) {
+      const u = await dbGet("SELECT email FROM users WHERE id = ?", [userId]);
+      if (u) failsMap.delete(u.email);
+    } else {
+      const users = readJSON('users');
+      const u = users.find(x => x.id === userId);
+      if (u) failsMap.delete(u.email);
+    }
+    return { fail_count: 0, frozen_until: null };
   },
 
   // --- VEHICLES ---

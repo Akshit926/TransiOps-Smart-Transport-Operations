@@ -1,11 +1,9 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const ws = require('ws');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY, // service role — bypasses RLS, backend-only
-  { realtime: { transport: ws } }
+  process.env.SUPABASE_SERVICE_KEY
 );
 
 console.log('TransitOps: Connected to Supabase PostgreSQL.');
