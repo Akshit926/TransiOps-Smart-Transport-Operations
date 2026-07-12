@@ -339,7 +339,7 @@ app.get('/api/trips', async (req, res) => {
   }
 });
 
-app.post('/api/trips', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.post('/api/trips', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   const { source, destination, vehicle_id, driver_id, cargo_weight, planned_distance, revenue } = req.body;
 
   if (!source || !destination || !vehicle_id || !driver_id || !cargo_weight || !planned_distance) {
@@ -401,7 +401,7 @@ app.post('/api/trips', authorize(['fleet_manager', 'driver']), async (req, res) 
 });
 
 // Dispatch Trip
-app.put('/api/trips/:id/dispatch', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.put('/api/trips/:id/dispatch', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   const { id } = req.params;
   try {
     const trip = await db.getTripById(id);
@@ -434,7 +434,7 @@ app.put('/api/trips/:id/dispatch', authorize(['fleet_manager', 'driver']), async
 });
 
 // Complete Trip
-app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   const { id } = req.params;
   const { odometer_end, fuel_consumed, fuel_cost } = req.body;
 
@@ -492,7 +492,7 @@ app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver']), async
 });
 
 // Cancel Trip
-app.put('/api/trips/:id/cancel', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.put('/api/trips/:id/cancel', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   const { id } = req.params;
   try {
     const trip = await db.getTripById(id);
@@ -636,7 +636,7 @@ app.get('/api/expenses', async (req, res) => {
   }
 });
 
-app.post('/api/expenses', authorize(['fleet_manager', 'financial_analyst']), async (req, res) => {
+app.post('/api/expenses', authorize(['fleet_manager', 'financial_analyst', 'driver']), async (req, res) => {
   const { vehicle_id, trip_id, type, cost, date, description } = req.body;
   if (!vehicle_id || !type || !cost || !date || !description) {
     return res.status(400).json({ error: 'All expense logging fields are required.' });

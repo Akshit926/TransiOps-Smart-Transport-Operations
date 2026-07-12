@@ -41,7 +41,8 @@ async function seed() {
       { email: 'manager@transitops.com', password: 'password123', name: 'Frank Miller (Fleet Mgr)', role: 'fleet_manager' },
       { email: 'driver@transitops.com', password: 'password123', name: 'Raven K. (Driver)', role: 'driver' },
       { email: 'safety@transitops.com', password: 'password123', name: 'Sophia Chen (Safety Officer)', role: 'safety_officer' },
-      { email: 'finance@transitops.com', password: 'password123', name: 'Richard Cox (Financial Analyst)', role: 'financial_analyst' }
+      { email: 'finance@transitops.com', password: 'password123', name: 'Richard Cox (Financial Analyst)', role: 'financial_analyst' },
+      { email: 'michael@transitops.com', password: 'password123', name: 'Michael Green (Driver)', role: 'driver' }
     ];
     for (const u of users) {
       await db.createUser(u);

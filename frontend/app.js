@@ -93,9 +93,15 @@ function showAppLayout() {
     roleEl.classList.add('manager');
     topBadge.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
   } else if (state.currentUser.role === 'driver') {
-    roleEl.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
-    roleEl.classList.add('dispatcher');
-    topBadge.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
+    if (state.currentUser.email === 'driver@transitops.com') {
+      roleEl.textContent = 'Dispatcher';
+      roleEl.classList.add('dispatcher');
+      topBadge.textContent = 'Dispatcher';
+    } else {
+      roleEl.textContent = 'Driver';
+      roleEl.classList.add('driver');
+      topBadge.textContent = 'Driver';
+    }
   } else if (state.currentUser.role === 'safety_officer') {
     roleEl.textContent = ROLE_DISPLAY_LABELS[state.currentUser.role];
     roleEl.classList.add('safety');
@@ -116,7 +122,12 @@ function showAppLayout() {
 
 function getLandingViewForRole(role) {
   if (role === 'fleet_manager') return 'vehicles';
-  if (role === 'driver') return 'dashboard';
+  if (role === 'driver') {
+    if (state.currentUser && state.currentUser.email === 'driver@transitops.com') {
+      return 'dashboard';
+    }
+    return 'driver_portal';
+  }
   if (role === 'safety_officer') return 'drivers';
   if (role === 'financial_analyst') return 'expenses';
   return 'settings';
@@ -134,7 +145,8 @@ function applyRolePermissions() {
     maintenance: document.getElementById('nav-maintenance'),
     expenses: document.getElementById('nav-expenses'),
     reports: document.getElementById('nav-reports'),
-    settings: document.getElementById('nav-settings')
+    settings: document.getElementById('nav-settings'),
+    driver_portal: document.getElementById('nav-driver-portal')
   };
 
   // Hide all navigation links by default
@@ -147,8 +159,12 @@ function applyRolePermissions() {
     if (tabs.vehicles) tabs.vehicles.style.display = 'flex';
     if (tabs.maintenance) tabs.maintenance.style.display = 'flex';
   } else if (role === 'driver') {
-    if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
-    if (tabs.trips) tabs.trips.style.display = 'flex';
+    if (state.currentUser && state.currentUser.email === 'driver@transitops.com') {
+      if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
+      if (tabs.trips) tabs.trips.style.display = 'flex';
+    } else {
+      if (tabs.driver_portal) tabs.driver_portal.style.display = 'flex';
+    }
   } else if (role === 'safety_officer') {
     if (tabs.drivers) tabs.drivers.style.display = 'flex';
   } else if (role === 'financial_analyst') {
@@ -451,6 +467,19 @@ function setupEventListeners() {
 
   document.getElementById('btn-export-csv').addEventListener('click', exportReportsCSV);
   document.getElementById('btn-export-pdf').addEventListener('click', exportReportsPDF);
+
+  // Driver Portal Actions
+  document.getElementById('driver-portal-log-fuel').addEventListener('click', () => {
+    const activeTrip = getActiveTripForCurrentDriver();
+    const vehicleId = activeTrip ? activeTrip.vehicle_id : '';
+    openDriverLogFuel(vehicleId, activeTrip ? activeTrip.id : null);
+  });
+
+  document.getElementById('driver-portal-log-expense').addEventListener('click', () => {
+    const activeTrip = getActiveTripForCurrentDriver();
+    const vehicleId = activeTrip ? activeTrip.vehicle_id : '';
+    openDriverLogExpense(vehicleId, activeTrip ? activeTrip.id : null);
+  });
 }
 
 // Helper to parse weights
@@ -624,6 +653,9 @@ async function navigateTo(view) {
         break;
       case 'reports':
         await loadReportsData();
+        break;
+      case 'driver_portal':
+        await loadDriverPortalData();
         break;
     }
   } catch (err) {
@@ -1587,7 +1619,11 @@ async function handleCompleteTrip(e) {
     await apiJSONCall(`/trips/${id}/complete`, 'PUT', payload);
     showToast('Trip completed. Fuel addition logged.', 'success');
     closeAllModals();
-    await loadTripsData();
+    if (state.activeView === 'driver_portal') {
+      await loadDriverPortalData();
+    } else {
+      await loadTripsData();
+    }
   } catch (err) {
     showToast(`Failed to complete: ${err.message}`, 'error');
   }
@@ -1655,8 +1691,10 @@ async function handleCloseMaintenance(e) {
 // 6. Fuel & Expense Logging
 async function handleLogFuel(e) {
   e.preventDefault();
+  const tripIdEl = document.getElementById('fuel-trip-id');
   const payload = {
     vehicle_id: document.getElementById('fuel-vehicle').value,
+    trip_id: tripIdEl && tripIdEl.value ? parseInt(tripIdEl.value) : null,
     liters: parseFloat(document.getElementById('fuel-liters').value),
     cost: parseFloat(document.getElementById('fuel-cost').value),
     date: document.getElementById('fuel-date').value
@@ -1667,7 +1705,11 @@ async function handleLogFuel(e) {
     showToast(`Fuel receipt logged successfully.`, 'success');
     closeAllModals();
     document.getElementById('form-fuel').reset();
-    await navigateTo('expenses');
+    if (state.currentUser && state.currentUser.role === 'driver') {
+      await navigateTo('driver_portal');
+    } else {
+      await navigateTo('expenses');
+    }
   } catch (err) {
     showToast(`Failed to log fuel: ${err.message}`, 'error');
   }
@@ -1896,4 +1938,228 @@ async function deleteDriver(id) {
   } catch (err) {
     showToast(`Error deleting driver: ${err.message}`, 'error');
   }
+}
+
+// ----------------------------------------------------
+// DRIVER PORTAL FUNCTIONS
+// ----------------------------------------------------
+async function loadDriverPortalData() {
+  if (!state.currentUser || state.currentUser.role !== 'driver') return;
+  
+  try {
+    state.drivers = await apiJSONCall('/drivers');
+    state.trips = await apiJSONCall('/trips');
+    state.vehicles = await apiJSONCall('/vehicles');
+
+    const cleanUserName = state.currentUser.name.replace(/\s*\(Driver\)\s*/i, '').trim().toLowerCase();
+    const myDriver = state.drivers.find(d => d.name.toLowerCase() === cleanUserName);
+
+    if (!myDriver) {
+      document.getElementById('driver-portal-welcome').textContent = `Welcome, ${state.currentUser.name}!`;
+      document.getElementById('driver-portal-active-trip-container').innerHTML = `
+        <div class="alert alert-warning" style="margin: 0; background: rgba(245,158,11,0.08); border: 1px dashed var(--color-inshop); padding: 12px; border-radius: 8px; color: var(--color-inshop);">
+          Driver profile matching "${state.currentUser.name}" not found in roster. Please contact the administrator.
+        </div>
+      `;
+      return;
+    }
+
+    document.getElementById('driver-portal-welcome').textContent = `Welcome back, ${myDriver.name}!`;
+    document.getElementById('driver-my-license-category').textContent = myDriver.license_category || '-';
+    document.getElementById('driver-my-license-expiry').textContent = myDriver.license_expiry_date || '-';
+    document.getElementById('driver-my-contact').textContent = myDriver.contact_number || '-';
+    
+    const statusEl = document.getElementById('driver-my-status');
+    statusEl.textContent = myDriver.status;
+    statusEl.className = `badge ${myDriver.status.toLowerCase().replace(/\s+/g, '')}`;
+
+    const score = myDriver.safety_score || 0;
+    document.getElementById('driver-safety-percentage').textContent = `${score}%`;
+    
+    const circle = document.getElementById('driver-safety-circle');
+    if (circle) {
+      const offset = 314.16 - (score / 100) * 314.16;
+      circle.style.strokeDashoffset = offset;
+      if (score >= 90) {
+        circle.style.stroke = 'var(--color-available)';
+      } else if (score >= 70) {
+        circle.style.stroke = 'var(--color-inshop)';
+      } else {
+        circle.style.stroke = 'var(--color-retired)';
+      }
+    }
+
+    const feedbackEl = document.getElementById('driver-safety-feedback');
+    if (feedbackEl) {
+      if (score >= 95) feedbackEl.textContent = 'Exceptional driving! Keep up the great safety standards.';
+      else if (score >= 85) feedbackEl.textContent = 'Good safety record. Stay alert on the road.';
+      else if (score >= 70) feedbackEl.textContent = 'Average safety rating. Minor improvements recommended.';
+      else feedbackEl.textContent = 'Caution: Please review driving safety guidelines.';
+    }
+
+    const myTrips = state.trips.filter(t => t.driver_id === myDriver.id);
+    const activeTrip = myTrips.find(t => t.status === 'Active' || t.status === 'Dispatched' || t.status === 'Draft');
+    
+    const activeTripContainer = document.getElementById('driver-portal-active-trip-container');
+    const vehicleModelEl = document.getElementById('driver-vehicle-model');
+    const vehicleRegEl = document.getElementById('driver-vehicle-reg');
+    const vehicleTypeEl = document.getElementById('driver-vehicle-type');
+    const vehicleOdometerEl = document.getElementById('driver-vehicle-odometer');
+
+    if (activeTrip) {
+      const assignedVehicle = state.vehicles.find(v => v.registration_number === activeTrip.vehicle_id);
+
+      if (assignedVehicle) {
+        vehicleModelEl.textContent = assignedVehicle.name || assignedVehicle.model || '-';
+        vehicleRegEl.textContent = assignedVehicle.registration_number || '-';
+        vehicleTypeEl.textContent = assignedVehicle.type || '-';
+        vehicleOdometerEl.textContent = `${(assignedVehicle.odometer || 0).toLocaleString()} km`;
+      } else {
+        vehicleModelEl.textContent = '-';
+        vehicleRegEl.textContent = activeTrip.vehicle_id || '-';
+        vehicleTypeEl.textContent = '-';
+        vehicleOdometerEl.textContent = '-';
+      }
+
+      const odo = assignedVehicle ? assignedVehicle.odometer : 0;
+      activeTripContainer.innerHTML = `
+        <div class="active-trip-card" style="display: flex; flex-direction: column; gap: 15px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 18px; font-weight: 600; color: var(--text-main);">Trip #${activeTrip.id}</span>
+            <span class="badge ${activeTrip.status.toLowerCase()}">${activeTrip.status}</span>
+          </div>
+          
+          <div class="route-visualizer" style="display: flex; align-items: center; justify-content: space-between; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; margin: 5px 0;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Origin</span>
+              <strong style="color: var(--text-main); font-size: 15px;">${activeTrip.source}</strong>
+            </div>
+            <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; margin: 0 15px; min-width: 60px;">
+              <div style="height: 1px; background: var(--border-color); width: 100%; position: absolute; top: 50%; transform: translateY(-50%); z-index: 1;"></div>
+              <div style="z-index: 2; background: var(--bg-sidebar); padding: 0 8px; color: var(--color-ontrip);">
+                <i data-lucide="navigation" style="transform: rotate(90deg); width: 16px; height: 16px; display: inline-block;"></i>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; text-align: right;">
+              <span style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Destination</span>
+              <strong style="color: var(--text-main); font-size: 15px;">${activeTrip.destination}</strong>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; text-align: center;">
+              <span style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 2px;">Cargo Load</span>
+              <strong style="font-size: 14px; color: var(--text-main);">${activeTrip.cargo_weight} kg</strong>
+            </div>
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; text-align: center;">
+              <span style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 2px;">Est. Distance</span>
+              <strong style="font-size: 14px; color: var(--text-main);">${activeTrip.planned_distance} km</strong>
+            </div>
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; text-align: center;">
+              <span style="font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 2px;">Pay/Revenue</span>
+              <strong style="font-size: 14px; color: var(--color-available);">$${activeTrip.revenue}</strong>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            ${activeTrip.status === 'Draft' ? `
+              <button class="btn btn-primary" onclick="driverPortalDispatch(${activeTrip.id})" style="flex: 1;">
+                <i data-lucide="play"></i><span>Start Trip</span>
+              </button>
+            ` : ''}
+            ${activeTrip.status === 'Dispatched' || activeTrip.status === 'Active' ? `
+              <button class="btn btn-primary" onclick="driverPortalComplete(${activeTrip.id}, ${odo})" style="flex: 1; background: var(--color-available); border-color: var(--color-available);">
+                <i data-lucide="check-circle"></i><span>Complete Trip</span>
+              </button>
+            ` : ''}
+            <button class="btn btn-outline" onclick="openDriverLogFuel('${activeTrip.vehicle_id}', ${activeTrip.id})" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 12px; font-size: 13px;">
+              <i data-lucide="droplet"></i><span>Fuel</span>
+            </button>
+            <button class="btn btn-outline" onclick="openDriverLogExpense('${activeTrip.vehicle_id}', ${activeTrip.id})" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 12px; font-size: 13px;">
+              <i data-lucide="receipt"></i><span>Expense</span>
+            </button>
+          </div>
+        </div>
+      `;
+    } else {
+      vehicleModelEl.textContent = '-';
+      vehicleRegEl.textContent = '-';
+      vehicleTypeEl.textContent = '-';
+      vehicleOdometerEl.textContent = '-';
+      
+      activeTripContainer.innerHTML = `
+        <div style="text-align: center; padding: 40px 20px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 15px;">
+          <div style="width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
+            <i data-lucide="coffee" style="width: 24px; height: 24px;"></i>
+          </div>
+          <div>
+            <h4 style="margin: 0; font-size: 15px; color: var(--text-main);">No Active Assignments</h4>
+            <p style="margin: 4px 0 0 0; font-size: 12px;">You are currently off-duty with no active trips. Enjoy your rest!</p>
+          </div>
+        </div>
+      `;
+    }
+
+    const pastTrips = myTrips.filter(t => t.status === 'Completed' || t.status === 'Cancelled');
+    const pastTripsBody = document.getElementById('driver-portal-past-trips');
+    if (pastTrips.length > 0) {
+      pastTripsBody.innerHTML = pastTrips.map(t => `
+        <tr>
+          <td>#${t.id}</td>
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <strong>${t.source} &rarr; ${t.destination}</strong>
+              <span style="font-size: 11px; color: var(--text-muted);">${t.planned_distance} km</span>
+            </div>
+          </td>
+          <td>${t.vehicle_id}</td>
+          <td>${t.cargo_weight} kg</td>
+          <td><span class="badge ${t.status.toLowerCase()}">${t.status}</span></td>
+        </tr>
+      `).join('');
+    } else {
+      pastTripsBody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No past trips recorded.</td></tr>`;
+    }
+
+    lucide.createIcons();
+  } catch (err) {
+    showToast(`Error loading driver portal: ${err.message}`, 'error');
+  }
+}
+
+function getActiveTripForCurrentDriver() {
+  if (!state.currentUser || !state.drivers || !state.trips) return null;
+  const cleanUserName = state.currentUser.name.replace(/\s*\(Driver\)\s*/i, '').trim().toLowerCase();
+  const myDriver = state.drivers.find(d => d.name.toLowerCase() === cleanUserName);
+  if (!myDriver) return null;
+  return state.trips.find(t => t.driver_id === myDriver.id && (t.status === 'Active' || t.status === 'Dispatched' || t.status === 'Draft'));
+}
+
+function openDriverLogFuel(vehicleId, tripId) {
+  setupExpenseFormDropdowns('fuel-vehicle');
+  document.getElementById('fuel-vehicle').value = vehicleId;
+  document.getElementById('fuel-trip-id').value = tripId || '';
+  document.getElementById('fuel-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('fuel-liters').value = '';
+  document.getElementById('fuel-cost').value = '';
+  openModal('modal-fuel');
+}
+
+function openDriverLogExpense(vehicleId, tripId) {
+  setupExpenseFormDropdowns('expense-vehicle');
+  document.getElementById('expense-vehicle').value = vehicleId;
+  document.getElementById('expense-trip-id').value = tripId || '';
+  document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('expense-cost').value = '';
+  document.getElementById('expense-desc').value = '';
+  openModal('modal-expense');
+}
+
+async function driverPortalDispatch(id) {
+  await dispatchTrip(id);
+  await loadDriverPortalData();
+}
+
+async function driverPortalComplete(id, odometerStart) {
+  openCompleteTripModal(id, odometerStart);
 }

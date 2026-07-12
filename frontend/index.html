@@ -74,6 +74,7 @@
               <option value="driver">Driver</option>
               <option value="safety_officer">Safety Officer</option>
               <option value="financial_analyst">Financial Analyst</option>
+              <option value="driver">Driver</option>
             </select>
           </div>
           
@@ -102,6 +103,9 @@
             </button>
             <button class="btn btn-outline quick-login-btn" data-email="finance@transitops.com" data-role="financial_analyst">
               <i data-lucide="dollar-sign"></i><span>Finance</span>
+            </button>
+            <button class="btn btn-outline quick-login-btn" data-email="michael@transitops.com" data-role="driver">
+              <i data-lucide="truck"></i><span>Driver</span>
             </button>
           </div>
         </div>
@@ -154,6 +158,9 @@
         </a>
         <a href="#analytics" class="nav-item" data-view="reports" id="nav-reports">
           <i data-lucide="bar-chart-3"></i><span>Analytics</span>
+        </a>
+        <a href="#driver-portal" class="nav-item" data-view="driver_portal" id="nav-driver-portal">
+          <i data-lucide="user"></i><span>My Portal</span>
         </a>
         <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
           <i data-lucide="settings"></i><span>Settings</span>
@@ -790,6 +797,138 @@
         </div>
       </section>
 
+      <!-- ==================== VIEW: 7B. DRIVER PORTAL ==================== -->
+      <section id="view-driver_portal" class="app-view" style="display: none;">
+        <div class="view-header">
+          <div>
+            <h1 id="driver-portal-welcome">Welcome back, Driver!</h1>
+            <p class="subtitle">Your active assignments, compliance records, and vehicle statistics</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-outline" id="driver-portal-log-fuel">
+              <i data-lucide="droplet"></i><span>Log Fuel Receipt</span>
+            </button>
+            <button class="btn btn-outline" id="driver-portal-log-expense">
+              <i data-lucide="receipt"></i><span>Log Expense</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="dashboard-split-row">
+          <!-- Left Column: Profile Card & Safety Score & Assigned Vehicle -->
+          <div class="dashboard-right-col" style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Driver Profile & Compliance Card -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="user-check" style="color: var(--color-ontrip);"></i>
+                My Profile & Compliance
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">License Category</span>
+                  <strong id="driver-my-license-category">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">License Expiry</span>
+                  <strong id="driver-my-license-expiry">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Contact Number</span>
+                  <strong id="driver-my-contact">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Duty Status</span>
+                  <span id="driver-my-status" class="badge available">-</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Safety Score Card -->
+            <div class="card" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 15px;">
+              <h3 style="align-self: flex-start; margin-bottom: 5px;">My Safety Performance</h3>
+              <div style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center;">
+                <svg width="120" height="120" viewBox="0 0 120 120" style="transform: rotate(-90deg);">
+                  <circle cx="60" cy="60" r="50" fill="transparent" stroke="var(--border-color)" stroke-width="10" />
+                  <circle id="driver-safety-circle" cx="60" cy="60" r="50" fill="transparent" stroke="var(--color-available)" stroke-width="10" 
+                          stroke-dasharray="314.16" stroke-dashoffset="314.16" style="transition: stroke-dashoffset 0.5s ease-out;" />
+                </svg>
+                <div style="position: absolute; display: flex; flex-direction: column; align-items: center;">
+                  <span id="driver-safety-percentage" style="font-size: 28px; font-weight: 700; color: var(--text-primary);">0%</span>
+                  <span style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Score</span>
+                </div>
+              </div>
+              <p id="driver-safety-feedback" style="font-size: 13px; color: var(--text-secondary); font-style: italic;">
+                Drive safely to maintain a high performance score!
+              </p>
+            </div>
+
+            <!-- Assigned Vehicle Card -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="truck" style="color: var(--color-ontrip);"></i>
+                My Assigned Vehicle
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Model</span>
+                  <strong id="driver-vehicle-model">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Registration No.</span>
+                  <strong id="driver-vehicle-reg">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Type</span>
+                  <strong id="driver-vehicle-type">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Odometer</span>
+                  <strong id="driver-vehicle-odometer">-</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Active Trip Card & Past Trips -->
+          <div class="dashboard-left-col" style="flex: 2 1 600px; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Active Assignment -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="navigation" style="color: var(--color-ontrip);"></i>
+                Active Assignment
+              </h3>
+              <div id="driver-portal-active-trip-container">
+                <!-- Dynamically loaded -->
+              </div>
+            </div>
+
+            <!-- Past Assignments -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="history" style="color: var(--text-secondary);"></i>
+                My Trip History
+              </h3>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Trip ID</th>
+                      <th>Route</th>
+                      <th>Vehicle</th>
+                      <th>Cargo Weight</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="driver-portal-past-trips">
+                    <tr><td colspan="5" style="text-align:center;">No past trips recorded.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ==================== VIEW: 8. SETTINGS & RBAC ==================== -->
       <section id="view-settings" class="app-view" style="display: none;">
         <div class="view-header">
@@ -1122,6 +1261,7 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-fuel">
+        <input type="hidden" id="fuel-trip-id">
         <div class="form-group">
           <label for="fuel-vehicle">Select Vehicle</label>
           <select id="fuel-vehicle" required>
@@ -1158,6 +1298,7 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-expense">
+        <input type="hidden" id="expense-trip-id">
         <div class="form-group">
           <label for="expense-vehicle">Select Vehicle</label>
           <select id="expense-vehicle" required>
