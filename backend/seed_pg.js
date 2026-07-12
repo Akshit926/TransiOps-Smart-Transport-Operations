@@ -6,7 +6,7 @@ async function seed() {
   console.log('TransitOps: Starting Supabase Seeding...');
 
   // ── Users (hashed passwords) ──────────────────────────
-  const hash = await bcrypt.hash('Password@123', 12);
+  const hash = await bcrypt.hash('password123', 12);
   const users = [
     { email: 'manager@transitops.com',  password_hash: hash, name: 'Frank Miller (Fleet Mgr)',          role: 'fleet_manager',      is_verified: true, fail_count: 0, phone: '+91 9000000001' },
     { email: 'driver@transitops.com',   password_hash: hash, name: 'Raven K. (Driver)',                 role: 'driver',             is_verified: true, fail_count: 0, phone: '+91 9000000002' },
@@ -16,7 +16,7 @@ async function seed() {
   for (const u of users) {
     try { await db.createUser(u); } catch (_) { /* already exists */ }
   }
-  console.log('Seeded Users. Password for all: Password@123');
+  console.log('Seeded Users. Password for all: password123');
 
   // ── Vehicles ──────────────────────────────────────────
   const vehicles = [

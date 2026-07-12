@@ -221,7 +221,7 @@ app.get('/api/trips', authenticate, async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/trips', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.post('/api/trips', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   const { source, destination, vehicle_id, driver_id, cargo_weight, planned_distance, revenue } = req.body;
   if (!source || !destination || !vehicle_id || !driver_id || !cargo_weight || !planned_distance)
     return res.status(400).json({ error: 'All trip parameters are required.' });
@@ -251,7 +251,7 @@ app.post('/api/trips', authorize(['fleet_manager', 'driver']), async (req, res) 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/trips/:id/dispatch', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.put('/api/trips/:id/dispatch', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   try {
     const trip = await db.getTripById(req.params.id);
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -270,7 +270,7 @@ app.put('/api/trips/:id/dispatch', authorize(['fleet_manager', 'driver']), async
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   const { odometer_end, fuel_consumed, fuel_cost } = req.body;
   if (!odometer_end || !fuel_consumed || !fuel_cost)
     return res.status(400).json({ error: 'Odometer end, fuel consumed, and fuel cost are required.' });
@@ -292,7 +292,7 @@ app.put('/api/trips/:id/complete', authorize(['fleet_manager', 'driver']), async
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/trips/:id/cancel', authorize(['fleet_manager', 'driver']), async (req, res) => {
+app.put('/api/trips/:id/cancel', authorize(['fleet_manager', 'driver', 'dispatcher']), async (req, res) => {
   try {
     const trip = await db.getTripById(req.params.id);
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -301,7 +301,7 @@ app.put('/api/trips/:id/cancel', authorize(['fleet_manager', 'driver']), async (
       return res.status(400).json({ error: `Cannot cancel trip in ${trip.status} status.` });
     }
 
-    const user = await db.getUserByEmail(req.headers['x-user-email']);
+    const user = await db.getUserByEmail(req.user.email);
     let roleDisplay = 'unknown';
     if (user) {
       if (user.role === 'fleet_manager' || user.role === 'dispatcher' || user.email === 'driver@transitops.com') {
@@ -336,14 +336,14 @@ app.put('/api/trips/:id/cancel', authorize(['fleet_manager', 'driver']), async (
       await db.updateDriver(trip.driver_id,   { status: 'Available' });
     }
 
-    await db.updateTrip(id, { status: 'Cancelled', cancellation_note });
+    await db.updateTrip(req.params.id, { status: 'Cancelled', cancellation_note });
 
-    res.json({ message: 'Trip successfully cancelled.', trip_id: id });
+    res.json({ message: 'Trip successfully cancelled.', trip_id: req.params.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-
 });
+
 
 // ─────────────────────────────────────────────
 // 5. Maintenance Logs

@@ -8,7 +8,7 @@ const { sendOTPEmail } = require('./mailer');
 const router = express.Router();
 const SALT_ROUNDS = 12;
 
-const VALID_ROLES = ['fleet_manager', 'driver', 'safety_officer', 'financial_analyst'];
+const VALID_ROLES = ['fleet_manager', 'driver', 'safety_officer', 'financial_analyst', 'dispatcher'];
 
 // ─────────────────────────────────────────────
 // PASSWORD STRENGTH VALIDATOR
