@@ -307,6 +307,7 @@ function showAppLayout() {
   const u = state.currentUser;
   document.getElementById('user-display-name').textContent = u.name;
   document.getElementById('top-user-name').textContent     = u.name;
+  const initialsEl = document.getElementById('user-initials');
 
   const roleEl   = document.getElementById('user-role-badge');
   const topBadge = document.getElementById('top-user-badge');
@@ -373,7 +374,8 @@ function applyRolePermissions() {
     maintenance: document.getElementById('nav-maintenance'),
     expenses:    document.getElementById('nav-expenses'),
     reports:     document.getElementById('nav-reports'),
-    settings:    document.getElementById('nav-settings')
+    settings:    document.getElementById('nav-settings'),
+    driver_portal: document.getElementById('nav-driver-portal')
   };
   for (const key in tabs) if (tabs[key]) tabs[key].style.display = 'none';
 
@@ -384,8 +386,12 @@ function applyRolePermissions() {
     if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
     if (tabs.trips) tabs.trips.style.display = 'flex';
   } else if (role === 'driver') {
-    if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
-    if (tabs.trips)     tabs.trips.style.display     = 'flex';
+    if (state.currentUser && state.currentUser.email === 'driver@transitops.com') {
+      if (tabs.dashboard) tabs.dashboard.style.display = 'flex';
+      if (tabs.trips) tabs.trips.style.display = 'flex';
+    } else {
+      if (tabs.driver_portal) tabs.driver_portal.style.display = 'flex';
+    }
   } else if (role === 'safety_officer') {
     if (tabs.drivers) tabs.drivers.style.display = 'flex';
   } else if (role === 'financial_analyst') {
@@ -784,6 +790,25 @@ function setupEventListeners() {
 
   document.getElementById('btn-export-csv').addEventListener('click', exportReportsCSV);
   document.getElementById('btn-export-pdf').addEventListener('click', exportReportsPDF);
+
+  // Driver Portal Actions
+  const dpFuelBtn = document.getElementById('driver-portal-log-fuel');
+  if (dpFuelBtn) {
+    dpFuelBtn.addEventListener('click', () => {
+      const activeTrip = getActiveTripForCurrentDriver();
+      const vehicleId = activeTrip ? activeTrip.vehicle_id : '';
+      openDriverLogFuel(vehicleId, activeTrip ? activeTrip.id : null);
+    });
+  }
+
+  const dpExpenseBtn = document.getElementById('driver-portal-log-expense');
+  if (dpExpenseBtn) {
+    dpExpenseBtn.addEventListener('click', () => {
+      const activeTrip = getActiveTripForCurrentDriver();
+      const vehicleId = activeTrip ? activeTrip.vehicle_id : '';
+      openDriverLogExpense(vehicleId, activeTrip ? activeTrip.id : null);
+    });
+  }
 }
 
 // Helper to parse weights
@@ -958,6 +983,9 @@ async function navigateTo(view) {
         break;
       case 'reports':
         await loadReportsData();
+        break;
+      case 'driver_portal':
+        await loadDriverPortalData();
         break;
     }
   } catch (err) {
@@ -1190,10 +1218,22 @@ function renderVehiclesTable() {
   }
 
   displayList.forEach(v => {
+    const relativeOdo = v.odometer % 10000;
+    let healthBadge = '';
+    if (v.status === 'In Shop') {
+      healthBadge = '<span class="badge badge-sm retired" style="margin-left: 6px; font-size:10px; padding:2px 6px;">Servicing</span>';
+    } else if (relativeOdo > 9000) {
+      healthBadge = '<span class="badge badge-sm cancelled" style="margin-left: 6px; font-size:10px; padding:2px 6px;" title="Overdue for 10k service">⚠️ Service Overdue</span>';
+    } else if (relativeOdo > 7500) {
+      healthBadge = '<span class="badge badge-sm inshop" style="margin-left: 6px; font-size:10px; padding:2px 6px;" title="Maintenance check due soon">🔧 Service Due</span>';
+    } else {
+      healthBadge = '<span class="badge badge-sm available" style="margin-left: 6px; font-size:10px; padding:2px 6px;">🟢 Healthy</span>';
+    }
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${v.registration_number}</strong></td>
-      <td>${v.name}</td>
+      <td>${v.name} ${healthBadge}</td>
       <td>${v.type}</td>
       <td>${v.max_load_capacity}</td>
       <td>${v.odometer.toLocaleString()} km</td>
@@ -1225,7 +1265,35 @@ async function loadDriversData() {
   renderDriversTable();
 }
 
+function renderDriversLeaderboard() {
+  const container = document.getElementById('leaderboard-cards-container');
+  if (!container) return;
+
+  // Sort drivers by safety score descending, take top 3
+  const topDrivers = [...state.drivers]
+    .sort((a, b) => b.safety_score - a.safety_score)
+    .slice(0, 3);
+
+  container.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉'];
+
+  topDrivers.forEach((d, idx) => {
+    const card = document.createElement('div');
+    card.className = 'leaderboard-item-card';
+    card.innerHTML = `
+      <div class="leaderboard-rank">${medals[idx] || (idx + 1)}</div>
+      <div class="leaderboard-driver-info">
+        <h4 style="margin:0; font-size:14px;">${d.name}</h4>
+        <small style="color:var(--text-muted); font-size:11px;">Category: ${d.license_category}</small>
+      </div>
+      <div class="leaderboard-score" style="font-weight:800; color:var(--color-available);">${d.safety_score} / 100</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
 function renderDriversTable() {
+  renderDriversLeaderboard();
   const query = document.getElementById('drv-search').value.toLowerCase().trim();
   const statusFilter = document.getElementById('drv-filter-status').value;
 
@@ -1905,7 +1973,11 @@ async function handleCompleteTrip(e) {
     await apiJSONCall(`/trips/${id}/complete`, 'PUT', payload);
     showToast('Trip completed. Fuel addition logged.', 'success');
     closeAllModals();
-    await loadTripsData();
+    if (state.activeView === 'driver_portal') {
+      await loadDriverPortalData();
+    } else {
+      await loadTripsData();
+    }
   } catch (err) {
     showToast(`Failed to complete: ${err.message}`, 'error');
   }
@@ -1973,8 +2045,10 @@ async function handleCloseMaintenance(e) {
 // 6. Fuel & Expense Logging
 async function handleLogFuel(e) {
   e.preventDefault();
+  const tripIdEl = document.getElementById('fuel-trip-id');
   const payload = {
     vehicle_id: document.getElementById('fuel-vehicle').value,
+    trip_id: tripIdEl && tripIdEl.value ? parseInt(tripIdEl.value) : null,
     liters: parseFloat(document.getElementById('fuel-liters').value),
     cost: parseFloat(document.getElementById('fuel-cost').value),
     date: document.getElementById('fuel-date').value
@@ -1985,7 +2059,13 @@ async function handleLogFuel(e) {
     showToast(`Fuel receipt logged successfully.`, 'success');
     closeAllModals();
     document.getElementById('form-fuel').reset();
-    await navigateTo('expenses');
+    if (state.currentUser && state.currentUser.role === 'driver' && state.currentUser.email !== 'driver@transitops.com') {
+      await navigateTo('driver_portal');
+    } else if (state.currentUser && (state.currentUser.role === 'dispatcher' || state.currentUser.email === 'driver@transitops.com')) {
+      await navigateTo('trips');
+    } else {
+      await navigateTo('expenses');
+    }
   } catch (err) {
     showToast(`Failed to log fuel: ${err.message}`, 'error');
   }
@@ -1993,8 +2073,10 @@ async function handleLogFuel(e) {
 
 async function handleLogExpense(e) {
   e.preventDefault();
+  const tripIdEl = document.getElementById('expense-trip-id');
   const payload = {
     vehicle_id: document.getElementById('expense-vehicle').value,
+    trip_id: tripIdEl && tripIdEl.value ? parseInt(tripIdEl.value) : null,
     type: document.getElementById('expense-type').value,
     cost: parseFloat(document.getElementById('expense-cost').value),
     date: document.getElementById('expense-date').value,
@@ -2006,7 +2088,13 @@ async function handleLogExpense(e) {
     showToast(`Operational expense details saved.`, 'success');
     closeAllModals();
     document.getElementById('form-expense').reset();
-    await navigateTo('expenses');
+    if (state.currentUser && state.currentUser.role === 'driver' && state.currentUser.email !== 'driver@transitops.com') {
+      await navigateTo('driver_portal');
+    } else if (state.currentUser && (state.currentUser.role === 'dispatcher' || state.currentUser.email === 'driver@transitops.com')) {
+      await navigateTo('trips');
+    } else {
+      await navigateTo('expenses');
+    }
   } catch (err) {
     showToast(`Failed to log expense: ${err.message}`, 'error');
   }

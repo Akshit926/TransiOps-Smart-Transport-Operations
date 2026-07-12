@@ -100,8 +100,11 @@
               <button class="btn btn-outline quick-login-btn" data-email="manager@transitops.com" data-role="fleet_manager">
                 <i data-lucide="shield-check"></i><span>Fleet Mgr</span>
               </button>
-              <button class="btn btn-outline quick-login-btn" data-email="driver@transitops.com" data-role="driver">
-                <i data-lucide="navigation"></i><span>Driver</span>
+              <button class="btn btn-outline quick-login-btn" data-email="driver@transitops.com" data-role="dispatcher">
+                <i data-lucide="navigation"></i><span>Dispatcher</span>
+              </button>
+              <button class="btn btn-outline quick-login-btn" data-email="michael@transitops.com" data-role="driver">
+                <i data-lucide="user"></i><span>Driver</span>
               </button>
               <button class="btn btn-outline quick-login-btn" data-email="safety@transitops.com" data-role="safety_officer">
                 <i data-lucide="shield-alert"></i><span>Safety Off</span>
@@ -319,6 +322,9 @@
         </a>
         <a href="#analytics" class="nav-item" data-view="reports" id="nav-reports">
           <i data-lucide="bar-chart-3"></i><span>Analytics & ROI</span>
+        </a>
+        <a href="#driver-portal" class="nav-item" data-view="driver_portal" id="nav-driver-portal">
+          <i data-lucide="user"></i><span>My Portal</span>
         </a>
         <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
           <i data-lucide="settings"></i><span>Settings & RBAC</span>
@@ -594,6 +600,14 @@
           <button class="btn btn-primary action-restricted-manager-safety" id="btn-add-driver">
             <i data-lucide="plus"></i> Register Driver
           </button>
+        </div>
+
+        <!-- Drivers Safety Leaderboard Widget (Advanced UX Feature) -->
+        <div class="card" id="drivers-leaderboard-card" style="margin-bottom: 24px;">
+          <h3 style="margin-bottom:12px;">Top Drivers Safety Leaderboard</h3>
+          <div class="leaderboard-cards-grid" id="leaderboard-cards-container">
+            <!-- Rendered dynamically in JS -->
+          </div>
         </div>
 
         <!-- Filter bar -->
@@ -985,6 +999,204 @@
         </div>
       </section>
 
+      <!-- ==================== VIEW: DRIVER PORTAL ==================== -->
+      <section id="view-driver_portal" class="app-view" style="display: none;">
+        <div class="view-header">
+          <div>
+            <h1 id="driver-portal-welcome">Welcome back, Driver!</h1>
+            <p class="subtitle">Your active assignments, compliance records, and vehicle statistics</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-outline" id="driver-portal-log-fuel">
+              <i data-lucide="droplet"></i><span>Log Fuel Receipt</span>
+            </button>
+            <button class="btn btn-outline" id="driver-portal-log-expense">
+              <i data-lucide="receipt"></i><span>Log Expense</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="dashboard-split-row">
+          <!-- Left Column: Profile Card & Safety Score & Assigned Vehicle -->
+          <div class="dashboard-right-col" style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Driver Profile & Compliance Card -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="user-check" style="color: var(--color-ontrip);"></i>
+                My Profile & Compliance
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">License Category</span>
+                  <strong id="driver-my-license-category">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">License Expiry</span>
+                  <strong id="driver-my-license-expiry">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Contact Number</span>
+                  <strong id="driver-my-contact">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Duty Status</span>
+                  <span id="driver-my-status" class="badge available">-</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Safety Score Card -->
+            <div class="card" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 15px;">
+              <h3 style="align-self: flex-start; margin-bottom: 5px;">My Safety Performance</h3>
+              <div style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center;">
+                <svg width="120" height="120" viewBox="0 0 120 120" style="transform: rotate(-90deg);">
+                  <circle cx="60" cy="60" r="50" fill="transparent" stroke="var(--border-color)" stroke-width="10" />
+                  <circle id="driver-safety-circle" cx="60" cy="60" r="50" fill="transparent" stroke="var(--color-available)" stroke-width="10" 
+                          stroke-dasharray="314.16" stroke-dashoffset="314.16" style="transition: stroke-dashoffset 0.5s ease-out;" />
+                </svg>
+                <div style="position: absolute; display: flex; flex-direction: column; align-items: center;">
+                  <span id="driver-safety-percentage" style="font-size: 28px; font-weight: 700; color: var(--text-primary);">0%</span>
+                  <span style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Score</span>
+                </div>
+              </div>
+              <p id="driver-safety-feedback" style="font-size: 13px; color: var(--text-secondary); font-style: italic;">
+                Drive safely to maintain a high performance score!
+              </p>
+            </div>
+
+            <!-- Assigned Vehicle Card -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="truck" style="color: var(--color-ontrip);"></i>
+                My Assigned Vehicle
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Model</span>
+                  <strong id="driver-vehicle-model">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Registration No.</span>
+                  <strong id="driver-vehicle-reg">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Type</span>
+                  <strong id="driver-vehicle-type">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="color: var(--text-secondary);">Odometer</span>
+                  <strong id="driver-vehicle-odometer">-</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Active Trip Card & Past Trips -->
+          <div class="dashboard-left-col" style="flex: 2 1 600px; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Active Assignment -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="navigation" style="color: var(--color-ontrip);"></i>
+                Active Assignment
+              </h3>
+              <div id="driver-portal-active-trip-container">
+                <!-- Dynamically loaded -->
+              </div>
+            </div>
+
+            <!-- Past Assignments -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="history" style="color: var(--text-secondary);"></i>
+                My Trip History
+              </h3>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Trip ID</th>
+                      <th>Route</th>
+                      <th>Vehicle</th>
+                      <th>Cargo Weight</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="driver-portal-past-trips">
+                    <tr><td colspan="5" style="text-align:center;">No past trips recorded.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Driver Logged Costs -->
+            <div class="card" style="padding: 20px;">
+              <h3 style="margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span style="display: flex; align-items: center; gap: 8px;">
+                  <i data-lucide="wallet" style="color: var(--color-available);"></i>
+                  My Logged Costs
+                </span>
+                <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);" id="driver-logged-costs-summary">Total: ₹0</span>
+              </h3>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 15px;" id="driver-logged-costs-trip-scope">
+                Showing costs for: None
+              </div>
+              
+              <!-- Tab Navigation -->
+              <div class="driver-cost-tabs" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 15px; gap: 15px;">
+                <button class="driver-cost-tab-btn active" onclick="switchDriverCostTab('fuel')" id="btn-driver-cost-tab-fuel" style="background: none; border: none; color: var(--text-muted); padding: 8px 12px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">
+                  <i data-lucide="droplet" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Fuel Logs
+                </button>
+                <button class="driver-cost-tab-btn" onclick="switchDriverCostTab('expenses')" id="btn-driver-cost-tab-expenses" style="background: none; border: none; color: var(--text-muted); padding: 8px 12px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;">
+                  <i data-lucide="receipt" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Other Expenses
+                </button>
+              </div>
+
+              <!-- Tab Content: Fuel Logs -->
+              <div id="driver-cost-content-fuel" class="driver-cost-tab-content">
+                <div class="table-container">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Liters</th>
+                        <th>Cost (₹)</th>
+                        <th>Trip ID</th>
+                      </tr>
+                    </thead>
+                    <tbody id="driver-portal-fuel-logs">
+                      <tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No fuel logs recorded.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Tab Content: Expenses -->
+              <div id="driver-cost-content-expenses" class="driver-cost-tab-content" style="display: none;">
+                <div class="table-container">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Type</th>
+                        <th>Cost (₹)</th>
+                        <th>Description</th>
+                        <th>Trip ID</th>
+                      </tr>
+                    </thead>
+                    <tbody id="driver-portal-expenses">
+                      <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No other expenses recorded.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
       <!-- ==================== VIEW: 8. SETTINGS & RBAC ==================== -->
       <section id="view-settings" class="app-view" style="display: none;">
         <div class="view-header-premium">
@@ -1317,6 +1529,7 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-fuel">
+        <input type="hidden" id="fuel-trip-id">
         <div class="form-group">
           <label for="fuel-vehicle">Select Vehicle</label>
           <select id="fuel-vehicle" required>
@@ -1353,6 +1566,7 @@
         <button class="btn-close-modal"><i data-lucide="x"></i></button>
       </div>
       <form id="form-expense">
+        <input type="hidden" id="expense-trip-id">
         <div class="form-group">
           <label for="expense-vehicle">Select Vehicle</label>
           <select id="expense-vehicle" required>
