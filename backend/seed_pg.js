@@ -9,9 +9,10 @@ async function seed() {
   const hash = await bcrypt.hash('password123', 12);
   const users = [
     { email: 'manager@transitops.com',  password_hash: hash, name: 'Frank Miller (Fleet Mgr)',          role: 'fleet_manager',      is_verified: true, fail_count: 0, phone: '+91 9000000001' },
-    { email: 'driver@transitops.com',   password_hash: hash, name: 'Raven K. (Driver)',                 role: 'driver',             is_verified: true, fail_count: 0, phone: '+91 9000000002' },
+    { email: 'driver@transitops.com',   password_hash: hash, name: 'Raven K.',                          role: 'dispatcher',         is_verified: true, fail_count: 0, phone: '+91 9000000002' },
     { email: 'safety@transitops.com',   password_hash: hash, name: 'Sophia Chen (Safety Officer)',      role: 'safety_officer',     is_verified: true, fail_count: 0, phone: '+91 9000000003' },
     { email: 'finance@transitops.com',  password_hash: hash, name: 'Richard Cox (Financial Analyst)',   role: 'financial_analyst',  is_verified: true, fail_count: 0, phone: '+91 9000000004' },
+    { email: 'michael@transitops.com',  password_hash: hash, name: 'Michael Green (Driver)',            role: 'driver',             is_verified: true, fail_count: 0, phone: '+91 9000000005' },
   ];
   for (const u of users) {
     try { await db.createUser(u); } catch (_) { /* already exists */ }
