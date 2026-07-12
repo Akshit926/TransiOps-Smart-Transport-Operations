@@ -914,10 +914,22 @@ function renderVehiclesTable() {
   }
 
   displayList.forEach(v => {
+    const relativeOdo = v.odometer % 10000;
+    let healthBadge = '';
+    if (v.status === 'In Shop') {
+      healthBadge = '<span class="badge badge-sm retired" style="margin-left: 6px; font-size:10px; padding:2px 6px;">Servicing</span>';
+    } else if (relativeOdo > 9000) {
+      healthBadge = '<span class="badge badge-sm cancelled" style="margin-left: 6px; font-size:10px; padding:2px 6px;" title="Overdue for 10k service">⚠️ Service Overdue</span>';
+    } else if (relativeOdo > 7500) {
+      healthBadge = '<span class="badge badge-sm inshop" style="margin-left: 6px; font-size:10px; padding:2px 6px;" title="Maintenance check due soon">🔧 Service Due</span>';
+    } else {
+      healthBadge = '<span class="badge badge-sm available" style="margin-left: 6px; font-size:10px; padding:2px 6px;">🟢 Healthy</span>';
+    }
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${v.registration_number}</strong></td>
-      <td>${v.name}</td>
+      <td>${v.name} ${healthBadge}</td>
       <td>${v.type}</td>
       <td>${v.max_load_capacity}</td>
       <td>${v.odometer.toLocaleString()} km</td>
@@ -949,7 +961,35 @@ async function loadDriversData() {
   renderDriversTable();
 }
 
+function renderDriversLeaderboard() {
+  const container = document.getElementById('leaderboard-cards-container');
+  if (!container) return;
+
+  // Sort drivers by safety score descending, take top 3
+  const topDrivers = [...state.drivers]
+    .sort((a, b) => b.safety_score - a.safety_score)
+    .slice(0, 3);
+
+  container.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉'];
+
+  topDrivers.forEach((d, idx) => {
+    const card = document.createElement('div');
+    card.className = 'leaderboard-item-card';
+    card.innerHTML = `
+      <div class="leaderboard-rank">${medals[idx] || (idx + 1)}</div>
+      <div class="leaderboard-driver-info">
+        <h4 style="margin:0; font-size:14px;">${d.name}</h4>
+        <small style="color:var(--text-muted); font-size:11px;">Category: ${d.license_category}</small>
+      </div>
+      <div class="leaderboard-score" style="font-weight:800; color:var(--color-available);">${d.safety_score} / 100</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
 function renderDriversTable() {
+  renderDriversLeaderboard();
   const query = document.getElementById('drv-search').value.toLowerCase().trim();
   const statusFilter = document.getElementById('drv-filter-status').value;
 
