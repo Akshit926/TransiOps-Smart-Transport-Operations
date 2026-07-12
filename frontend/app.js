@@ -416,7 +416,7 @@ function setupEventListeners() {
   document.querySelectorAll('.quick-login-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.getElementById('login-email').value    = btn.getAttribute('data-email');
-      document.getElementById('login-password').value = 'Password@123';
+      document.getElementById('login-password').value = 'password123';
       document.getElementById('login-form').dispatchEvent(new Event('submit'));
     });
   });
