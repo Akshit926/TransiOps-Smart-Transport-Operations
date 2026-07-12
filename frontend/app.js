@@ -6,7 +6,7 @@ const API_BASE = 'http://localhost:5000/api';
 
 const ROLE_DISPLAY_LABELS = {
   fleet_manager: 'Fleet Manager',
-  driver: 'Dispatcher',
+  driver: 'Driver',
   safety_officer: 'Safety Officer',
   financial_analyst: 'Financial Analyst'
 };
@@ -1272,15 +1272,14 @@ async function loadReportsData() {
   let activeOrAvail = state.vehicles.filter(v => v.status !== 'Retired').length;
   let utilization = activeOrAvail > 0 ? Math.round((activeVehicles / activeOrAvail) * 100) : 81;
 
-  let totalRev = state.reports.reduce((sum, r) => sum + r.total_revenue, 0);
   let avgRoi = state.reports.length > 0 
-    ? (state.reports.reduce((sum, r) => sum + r.roi, 0) / state.reports.length).toFixed(1) 
-    : '14.2';
+    ? (state.reports.reduce((sum, r) => sum + r.roi, 0) / state.reports.length).toFixed(3) 
+    : '0.142';
 
   document.getElementById('analytic-fuel-efficiency').textContent = `${efficiency} km/l`;
   document.getElementById('analytic-fleet-utilization').textContent = `${utilization}%`;
   document.getElementById('analytic-ops-cost').textContent = `₹${grandTotal.toLocaleString()}`;
-  document.getElementById('analytic-vehicle-roi').textContent = `${avgRoi}%`;
+  document.getElementById('analytic-vehicle-roi').textContent = `${avgRoi}`;
 
   // Render Detailed Vehicle Reports Table
   const tbody = document.querySelector('#reports-table tbody');

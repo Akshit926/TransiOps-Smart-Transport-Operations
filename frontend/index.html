@@ -32,7 +32,7 @@
           <h3>One login, four roles:</h3>
           <ul>
             <li><span class="bullet manager"></span> Fleet Manager</li>
-            <li><span class="bullet dispatcher"></span> Dispatcher</li>
+            <li><span class="bullet dispatcher"></span> Driver</li>
             <li><span class="bullet safety"></span> Safety Officer</li>
             <li><span class="bullet finance"></span> Financial Analyst</li>
           </ul>
@@ -71,7 +71,7 @@
             <label for="login-role">ROLE (RBAC)</label>
             <select id="login-role" required>
               <option value="fleet_manager">Fleet Manager</option>
-              <option value="driver">Dispatcher</option>
+              <option value="driver">Driver</option>
               <option value="safety_officer">Safety Officer</option>
               <option value="financial_analyst">Financial Analyst</option>
             </select>
@@ -95,7 +95,7 @@
               <i data-lucide="shield-check"></i><span>Fleet Mgr</span>
             </button>
             <button class="btn btn-outline quick-login-btn" data-email="driver@transitops.com" data-role="driver">
-              <i data-lucide="navigation"></i><span>Dispatcher</span>
+              <i data-lucide="navigation"></i><span>Driver</span>
             </button>
             <button class="btn btn-outline quick-login-btn" data-email="safety@transitops.com" data-role="safety_officer">
               <i data-lucide="shield-alert"></i><span>Safety Off</span>
@@ -737,8 +737,8 @@
           </div>
           <div class="kpi-card">
             <div class="kpi-data">
-              <span class="kpi-label">VEHICLE ROI</span>
-              <h2 class="kpi-value" id="analytic-vehicle-roi">14.2%</h2>
+              <span class="kpi-label">VEHICLE ROI (ratio)</span>
+              <h2 class="kpi-value" id="analytic-vehicle-roi">0.142</h2>
             </div>
           </div>
         </div>
